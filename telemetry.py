@@ -1,15 +1,24 @@
 """GoPro telemetry (GPMF): speed, accelerometer and GPS track -> ride highlights and boring stretches.
 
 GoPro MP4s carry a 'gpmd' data stream ("GoPro MET") of GPMF records: KLV items (4-char key, type char, struct size,
-big-endian repeat count, payload padded to 4 bytes), nested DEVC -> STRM -> samples, one DEVC payload per ~second.
+big-endian repeat count, payload padded to 4 bytes), nested DEVC -> STRM -> samples. Each gpmd packet (~1.001 s) holds
+one DEVC per device (a Karma drone adds its own). GPS is GPS5 (HERO5-11) or GPS9 (HERO11+, per-sample fix and DOP).
 The ride analysis uses the GPS track only (see `_signals`); ACCL is decoded for callers that want it.
+Checked against GoPro's gpmf-parser on its sample clips (HERO5-8, MAX, Fusion, Karma), a HERO11 dump and a real
+HERO13 bike ride (GPS9): values match to the last digit, sample times to the MP4 packet times.
 """
 import re
 import struct
+from fractions import Fraction
+from itertools import accumulate
 
 import video_engine as ve
 
 DT = 0.1  # analysis grid step (s)
+# GPS dilution of precision cut-off (GoPro: GPSP = DOP x100, < 500 is "good", 9999 = no fix). Against a Garmin on a
+# real HERO13 ride, positions were off by a median 4 m at DOP < 5, 10-45 m at 5-10 and 26 m+ above 10 (speed stays
+# within ~0.3 m/s up to 20); much of that ride sits at DOP 5-10, so 5 would have dropped nearly all of it.
+MAX_DOP = 10.0
 _FMT = {"b": "b", "B": "B", "s": "h", "S": "H", "l": "i", "L": "I", "f": "f", "d": "d", "j": "q", "J": "Q"}
 
 
@@ -31,8 +40,22 @@ def read_gopro(path) -> dict:
     idx = _gpmd_stream(path)
     if idx is None:
         return {}
-    raw = ve._ffmpeg(["-i", str(path), "-map", f"0:{idx}", "-c", "copy", "-f", "rawvideo", "-"], binary=True).stdout
-    return parse_gpmf(raw)
+    args = ["-i", str(path), "-map", f"0:{idx}", "-c", "copy"]
+    raw = ve._ffmpeg([*args, "-f", "rawvideo", "-"], binary=True).stdout
+    return parse_gpmf(raw, _packets(ve._ffmpeg([*args, "-f", "framecrc", "-"]).stdout))
+
+
+def _packets(framecrc):
+    """[(start s, duration s, size)] per gpmd packet from an `-f framecrc` listing (the MP4 sample table's times)."""
+    tb = re.search(r"#tb 0: (\d+)/(\d+)", framecrc)
+    tb = Fraction(int(tb.group(1)), int(tb.group(2))) if tb else Fraction(1)
+    rows = [line.split(",") for line in framecrc.splitlines() if line[:1].isdigit()]
+    out = [(float(int(r[2]) * tb), float(int(r[3]) * tb), int(r[4])) for r in rows]
+    if len(out) > 1:
+        # shortcut: FFmpeg stretches the last packet to the file's end, so it is capped at the one before; a short
+        # final payload (stts 0.667 s) then has its samples up to 0.3 s late, read stts from the MP4 if that matters
+        out[-1] = (out[-1][0], min(out[-1][1], out[-2][1]), out[-1][2])
+    return out
 
 
 def _klv(data):
@@ -45,14 +68,17 @@ def _klv(data):
         pos += 8 + (n + 3) // 4 * 4
 
 
-def _values(typ, size, payload):
-    """A string for 'c', else one tuple per sample ([] for types we don't need, e.g. nested or complex)."""
+def _values(typ, size, payload, typedef=""):
+    """A string for 'c', else one tuple per sample ([] for types we don't need, e.g. nested).
+
+    Complex ('?') samples are decoded from the stream's TYPE string, e.g. GPS9 = "lllllllSS".
+    """
     if typ == "c":
         return payload.decode("latin-1").rstrip("\0")
-    fmt = _FMT.get(typ)
-    if not fmt or not size:
+    fmt = "".join(_FMT.get(c, "?") for c in typedef) if typ == "?" else _FMT.get(typ)
+    if not fmt or "?" in fmt or not size or (typ == "?" and struct.calcsize(">" + fmt) != size):
         return []
-    k = size // struct.calcsize(fmt)
+    k = size // struct.calcsize(fmt) if typ != "?" else 1
     return [struct.unpack_from(f">{k}{fmt}", payload, i) for i in range(0, len(payload) - size + 1, size)]
 
 
@@ -62,33 +88,62 @@ def _scaled(rows, scal):
     return [[v / s for v, s in zip(r, scal if len(scal) > 1 else scal * len(r))] for r in rows]
 
 
-def parse_gpmf(data: bytes) -> dict:
-    """Decode a raw gpmd stream (GPS5 + ACCL); t = seconds from clip start. {} if it holds nothing usable."""
+def _devcs(data):
+    return [p for key, _, _, p in _klv(data) if key == "DEVC"]
+
+
+def _streams(devcs):
+    """{key: values} for every STRM of the given DEVC payloads."""
+    out = []
+    for devc in devcs:
+        for k, _, _, strm in _klv(devc):
+            if k == "STRM":
+                items = list(_klv(strm))
+                typedef = next((p.decode("latin-1").rstrip("\0") for k2, _, _, p in items if k2 == "TYPE"), "")
+                out.append({k2: _values(typ, size, p, typedef) for k2, typ, size, p in items})
+    return out
+
+
+def parse_gpmf(data: bytes, packets=None) -> dict:
+    """Decode a raw gpmd stream (GPS5/GPS9 + ACCL); t = seconds from clip start. {} if it holds nothing usable.
+
+    `packets` = [(start, duration, size)] from the MP4 (`_packets`); each packet's samples are spread evenly over it.
+    Without them every top-level DEVC is taken as one 1 s packet (a bare GPMF dump, as in GoPro's samples/*.raw).
+    """
     out = {"speed": [], "accel": [], "gps": []}
-    devcs = [p for key, _, _, p in _klv(data) if key == "DEVC"]
-    for i, devc in enumerate(devcs):
-        # shortcut: payload i is taken to span [i, i+1) s (GoPro writes one every ~1.001 s, so <=0.7 s drift by the
-        # end of a 12-min chapter), upgrade to the gpmd packet pts (`-f framecrc`) if sync must be frame-tight
-        for key, _, _, strm in _klv(devc):
-            if key != "STRM":
-                continue
-            s = {k: _values(typ, size, p) for k, typ, size, p in _klv(strm)}
+    if packets and sum(p[2] for p in packets) == len(data):
+        offs = accumulate((p[2] for p in packets), initial=0)
+        chunks = [(t0, dur, _devcs(data[o:o + n])) for (t0, dur, n), o in zip(packets, offs)]
+    else:
+        chunks = [(i, 1.0, [devc]) for i, devc in enumerate(_devcs(data))]
+    for t0, dur, devcs in chunks:
+        streams = _streams(devcs)
+        gps9 = any(s.get("GPS9") for s in streams)  # HERO11 also writes GPS5; GPS9 carries per-sample fix + DOP
+        for s in streams:
             scal = s.get("SCAL") or [(1,)]
-            gps, fix = s.get("GPS5"), (s.get("GPSF") or [(3,)])[0][0]
-            if gps and fix >= 2:  # GPSF 0/1 = no lock: positions are stale or zero
-                for j, (lat, lon, alt, speed2d, *_) in enumerate(_scaled(gps, scal)):
-                    t = i + j / len(gps)
-                    out["gps"].append((t, lat, lon, alt))
-                    out["speed"].append((t, speed2d))
+            if gps9 and s.get("GPS9"):
+                rows = _scaled(s["GPS9"], scal)
+                ok = [len(r) == 9 and r[8] >= 2 and r[7] <= MAX_DOP for r in rows]
+            elif not gps9 and s.get("GPS5"):
+                rows = _scaled(s["GPS5"], scal)
+                fix, dop = (s.get("GPSF") or [(3,)])[0][0], (s.get("GPSP") or [(0,)])[0][0] / 100
+                ok = [fix >= 2 and dop <= MAX_DOP] * len(rows)  # GPSF 0/1 = no lock: positions are stale or junk
+            else:
+                rows = ok = []
+            for j, (r, good) in enumerate(zip(rows, ok)):
+                if good:
+                    t = t0 + dur * j / len(rows)
+                    out["gps"].append((t, r[0], r[1], r[2]))
+                    out["speed"].append((t, r[3]))
             if s.get("ACCL"):
-                # channel order: ORIN when present (HERO8+, lowercase = negated axis), else Z,X,Y as documented
-                # for older cameras; the result is the camera frame (x, y, z), not the bike's
+                # channel order: ORIN when present (HERO7+, lowercase = negated axis; matches MTRX on real files),
+                # else Z,X,Y as documented for older cameras; the result is the camera frame (x, y, z), not the bike's
                 orin = s.get("ORIN") if isinstance(s.get("ORIN"), str) else ""
                 orin = orin if sorted(orin.upper()) == ["X", "Y", "Z"] else "ZXY"
                 rows = _scaled(s["ACCL"], scal)
                 for j, r in enumerate(rows):
                     a = {c.upper(): v if c.isupper() else -v for c, v in zip(orin, r)}
-                    out["accel"].append((i + j / len(rows), a["X"], a["Y"], a["Z"]))
+                    out["accel"].append((t0 + dur * j / len(rows), a["X"], a["Y"], a["Z"]))
     return out if any(out.values()) else {}
 
 
@@ -139,8 +194,9 @@ def _signals(tel, duration):
     lat0 = np.radians(np.median(gps[:, 1]))
     x = np.interp(t, gps[:, 0], np.radians(gps[:, 2]) * 6371000 * np.cos(lat0))  # local metres
     y = np.interp(t, gps[:, 0], np.radians(gps[:, 1]) * 6371000)
-    # each derivative is smoothed over 1 s: raw GPS jitter differentiated twice would swamp the signal
-    vx, vy = (_rolling(np.gradient(_rolling(c, n, np.mean), DT), n, np.mean) for c in (x, y))
+    # position and velocity are smoothed over 2 s: real GPS jitter (10-45 m at DOP 5-10 on a HERO13) differentiated
+    # twice read as "twisties" on a straight city ride over 1 s; 2 s still passes a 6 s S-bend at 2/3 strength
+    vx, vy = (_rolling(np.gradient(_rolling(c, 2 * n, np.mean), DT), 2 * n, np.mean) for c in (x, y))
     ax, ay = (_rolling(np.gradient(c, DT), n, np.mean) for c in (vx, vy))
     lat = np.where(v > 3, (vx * ay - vy * ax) / np.maximum(np.hypot(vx, vy), 1.0), 0.0)
     alt = _rolling(np.interp(t, gps[:, 0], gps[:, 3]), 5 * n, np.median)  # GPS altitude is noisy (±5-10 m)

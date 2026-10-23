@@ -11,11 +11,12 @@ the following components under their own licenses.
 | faster-whisper | MIT | https://github.com/SYSTRAN/faster-whisper |
 | CTranslate2 | MIT | https://github.com/OpenNMT/CTranslate2 |
 | Silero VAD model (shipped inside faster-whisper) | MIT | https://github.com/snakers4/silero-vad |
-| ONNX Runtime (also runs the vision and voice-enhancement models) | MIT | https://github.com/microsoft/onnxruntime |
+| ONNX Runtime (also runs the vision and voice-enhancement models); the Windows build uses `onnxruntime-directml`, which includes Microsoft's `DirectML.dll` | MIT (ONNX Runtime); DirectML is redistributed under Microsoft's DirectML licence terms | https://github.com/microsoft/onnxruntime · https://github.com/microsoft/DirectML |
 | PyAV / FFmpeg libraries used by faster-whisper | BSD-3 / LGPL | https://github.com/PyAV-Org/PyAV |
 | NumPy | BSD-3 | https://github.com/numpy/numpy |
 | FastAPI, Starlette, Pydantic | MIT | https://github.com/fastapi/fastapi |
 | python-multipart | Apache-2.0 | https://github.com/Kludex/python-multipart |
+| websockets (talks to the headless browser that draws motion graphics) | BSD-3-Clause | https://github.com/python-websockets/websockets |
 | Uvicorn | BSD-3 | https://github.com/encode/uvicorn |
 | pywebview | BSD-3 | https://github.com/r0x0r/pywebview |
 | pythonnet (Windows) | MIT | https://github.com/pythonnet/pythonnet |
@@ -37,6 +38,8 @@ FFmpeg binary. The same applies to PyQt6 (GPL v3) in the Linux build.
 | LPD-YuNet licence-plate detector (`opencv/license_plate_detection_yunet`) | Apache-2.0 | From Hugging Face on first use of plate blur, pinned commit, 4 MB. Source: https://github.com/opencv/opencv_zoo/tree/main/models/license_plate_detection_yunet |
 | CLIP ViT-B/32 (OpenAI), int8 ONNX export by Xenova (`Xenova/clip-vit-base-patch32`: vision model, text model, tokenizer) | MIT | From Hugging Face on first footage search, pinned commit, about 150 MB. Source: https://github.com/openai/CLIP |
 | DeepFilterNet3 ONNX export (Hendrik Schröter) | MIT or Apache-2.0 | From `raw.githubusercontent.com/Rikorose/DeepFilterNet` on first use of voice enhancement, pinned commit, SHA-256 checked, 8 MB. Source: https://github.com/Rikorose/DeepFilterNet |
+| Chrome for Testing `chrome-headless-shell` 156.0.8078.47 (Google / the Chromium project) | BSD-3-Clause (Chromium) and the licences of its third-party components, listed in the archive | Downloaded from storage.googleapis.com/chrome-for-testing-public on the first motion-graphics render, only when no Chrome, Chromium, Edge or Brave is installed. Pinned version, exact size checked, 104–126 MB zipped. https://github.com/GoogleChromeLabs/chrome-for-testing |
+| An installed Google Chrome, Microsoft Edge, Brave or Chromium | Its own licence | Used as it is, headless, to draw motion graphics when present |
 | Vision models you pull into Ollama for the visual judge | Each model's own license | e.g. Gemma 3 (Gemma Terms of Use). |
 | Language models you pull into Ollama or LM Studio | Each model's own license | e.g. Qwen 2.5 (Apache-2.0 for most sizes), Llama 3.x (Llama Community License), Gemma (Gemma Terms). Check the license of the model you use. |
 
@@ -49,3 +52,19 @@ Installed only if you run `pip install -r requirements-voice.txt` from a source 
 | `chatterbox-tts` and the Chatterbox-Turbo model (Resemble AI) | MIT | The model (about 3.8 GB) downloads from Hugging Face on first use. Its output carries Resemble AI's inaudible Perth watermark. https://github.com/resemble-ai/chatterbox |
 | PyTorch | BSD-3 | https://github.com/pytorch/pytorch |
 | Their other dependencies (Transformers and others) | Each under its own license | Check them before redistributing an environment that contains them. |
+
+## Coding agents (not bundled)
+
+Claude Code, Codex, Cursor, OpenCode, Gemini CLI and other agents you connect to LeanCut are your own installs,
+under their own terms; LeanCut only starts them or answers their MCP calls on your machine.
+
+## Design credit
+
+LeanCut's motion-graphics pages follow the page contract of [OpenFilm](https://github.com/openfilm/openfilm)
+(MIT, © the OpenFilm authors), so pages work in both. No OpenFilm code is included. "OpenFilm" is a trademark of
+its project; LeanCut is not affiliated with or endorsed by it.
+
+## Test data
+
+`tests/fixtures/gopro13_ride_gpmd.mov`: the first 3 s of GoPro metadata from "ride-recap sample ride — 2026-07-10"
+by Ian Macomber, CC BY 4.0. Details in `tests/fixtures/LICENSE.md`.

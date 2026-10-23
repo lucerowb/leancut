@@ -4,6 +4,9 @@
 #   macOS:   MACOS_CERT_P12 (base64 Developer ID Application .p12), MACOS_CERT_PASSWORD, MACOS_SIGN_IDENTITY,
 #            APPLE_ID, APPLE_TEAM_ID, APPLE_APP_PASSWORD (app-specific password, for notarization)
 #   Windows: WINDOWS_CERT_PFX (base64 .pfx), WINDOWS_CERT_PASSWORD
+#        or Azure Artifact Signing: AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, AZURE_SIGNING_ENDPOINT,
+#            AZURE_SIGNING_ACCOUNT, AZURE_CERT_PROFILE (used only when WINDOWS_CERT_PFX is not set)
+# See SIGNING.md for how to get each one. Tagged releases also get SHA256SUMS.txt for all three downloads.
 name: Release
 
 on:
@@ -35,13 +38,20 @@ jobs:
           echo "$MACOS_CERT_P12" | base64 --decode > cert.p12
           security create-keychain -p ci build.keychain
           security default-keychain -s build.keychain
+          security set-keychain-settings -lut 3600 build.keychain  # the default 5-minute auto-lock can hit mid-build
           security unlock-keychain -p ci build.keychain
+          security list-keychains -d user -s build.keychain $(security list-keychains -d user | tr -d '"')
           security import cert.p12 -k build.keychain -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign
           security set-key-partition-list -S apple-tool:,apple: -s -k ci build.keychain
           rm cert.p12
       - run: python build.py
         env:
           LEANCUT_CODESIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
+      - name: Sign the disk image
+        if: env.MACOS_CERT_P12 != ''
+        run: codesign --sign "$IDENTITY" --timestamp dist/LeanCut-macOS.dmg
+        env:
+          IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
       - name: Notarize
         if: env.APPLE_ID != ''
         env:
@@ -51,6 +61,8 @@ jobs:
           xcrun notarytool submit dist/LeanCut-macOS.dmg --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" \
             --password "$APPLE_APP_PASSWORD" --wait
           xcrun stapler staple dist/LeanCut-macOS.dmg
+          xcrun stapler validate dist/LeanCut-macOS.dmg
+          spctl -a -t open --context context:primary-signature -vv dist/LeanCut-macOS.dmg
       - uses: actions/upload-artifact@v4
         with:
           name: LeanCut-macOS
@@ -65,12 +77,20 @@ jobs:
     runs-on: windows-latest
     env:
       WINDOWS_CERT_PFX: ${{ secrets.WINDOWS_CERT_PFX }}
+      AZURE_SIGNING_ACCOUNT: ${{ secrets.AZURE_SIGNING_ACCOUNT }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install -r requirements.txt -r requirements-build.txt -r requirements-dev.txt
+      # onnxruntime-directml replaces the CPU package (same `onnxruntime` module plus DirectML.dll): vision and voice
+      # models run on any DirectX 12 GPU, and on the CPU otherwise
+      - shell: bash
+        run: |
+          pip install -r requirements.txt -r requirements-build.txt -r requirements-dev.txt
+          pip uninstall -y onnxruntime
+          pip install onnxruntime-directml
+          python -c "import onnxruntime as o; assert 'DmlExecutionProvider' in o.get_available_providers()"
       - run: python -m pytest -q tests
       - run: python build.py
         env:
@@ -85,6 +105,20 @@ jobs:
           $signtool = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin\*\x64\signtool.exe" | Select-Object -Last 1
           & $signtool.FullName sign /f cert.pfx /p $env:WINDOWS_CERT_PASSWORD /tr http://timestamp.digicert.com /td sha256 /fd sha256 dist\LeanCut\LeanCut.exe
           Remove-Item cert.pfx
+      - name: Sign LeanCut.exe (Azure Artifact Signing)
+        if: env.WINDOWS_CERT_PFX == '' && env.AZURE_SIGNING_ACCOUNT != ''
+        uses: azure/artifact-signing-action@v2
+        with:
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+          endpoint: ${{ secrets.AZURE_SIGNING_ENDPOINT }}
+          signing-account-name: ${{ secrets.AZURE_SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ secrets.AZURE_CERT_PROFILE }}
+          files: ${{ github.workspace }}\dist\LeanCut\LeanCut.exe
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
       - run: python -c "import shutil; shutil.make_archive('dist/LeanCut-Windows', 'zip', 'dist', 'LeanCut')"
       - uses: actions/upload-artifact@v4
         with:
@@ -109,7 +143,9 @@ jobs:
           libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-shape0
           libxcb-xinerama0 libxcb-xkb1 libnss3 libxcomposite1 libxdamage1 libxrandr2 libxtst6 libasound2
           libdbus-1-3 libfontconfig1 xvfb
-      # pywebview's Qt backend (PyQt6 + WebEngine): Linux only, the other builds use the system web view
+      # pywebview's Qt backend (PyQt6 + WebEngine): Linux only, the other builds use the system web view.
+      # onnxruntime stays the CPU package: onnxruntime-gpu needs CUDA 12 + cuDNN 9 on the user's machine (from source:
+      # pip uninstall onnxruntime && pip install onnxruntime-gpu; onnx_runtime.py then picks CUDA by itself)
       - run: pip install -r requirements.txt -r requirements-build.txt -r requirements-dev.txt "pywebview[qt]"
       - run: python -m pytest -q tests
       - run: python build.py
@@ -125,4 +161,20 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: dist/LeanCut-Linux-x64.tar.gz
+          body_path: .github/release-notes.md
+
+  checksums:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [macos, windows, linux]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4  # for the release notes file the release action expects
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - run: cd dist && sha256sum LeanCut-macOS.dmg LeanCut-Windows.zip LeanCut-Linux-x64.tar.gz > SHA256SUMS.txt && cat SHA256SUMS.txt
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/SHA256SUMS.txt
           body_path: .github/release-notes.md

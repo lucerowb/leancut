@@ -19,4 +19,7 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: pip install -r requirements.txt -r requirements-dev.txt
+      - if: runner.os == 'Windows'  # the onnxruntime package the Windows release ships (see release.yml)
+        shell: bash
+        run: pip uninstall -y onnxruntime && pip install onnxruntime-directml
       - run: python -m pytest -q tests

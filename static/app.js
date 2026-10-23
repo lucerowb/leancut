@@ -117,7 +117,7 @@ $("#projectSelect").onchange = async (e) => {
       if (name === null) return ($("#projectSelect").value = S.project.id);
       await post("/api/projects", { name });
     } else await post(`/api/projects/${e.target.value}/open`);
-    stop(); T = 0; sel = -1; previewUrl = null; mode = "instant"; syncMode();
+    stop(); T = 0; sel = -1; selIds = new Set(); previewUrl = null; mode = "instant"; syncMode();
     await loadState();
   } catch (err) { fail(err); $("#projectSelect").value = S.project.id; }
 };
@@ -169,13 +169,16 @@ function renderClips() {
         <button data-act="up" aria-label="Move up">↑</button><button data-act="down" aria-label="Move down">↓</button>
         <button data-act="del" aria-label="Remove clip">✕</button>
       </span>
-      <span class="muted small">${fmtT(c.duration)} · ${fmtSize(c.size)} · ${c.width}x${c.height}${c.segments ? " · transcribed" : ""}</span>
+      <span class="muted small">${c.recorded ? c.recorded.slice(5, 16).replace("T", " ") + " · " : ""}${fmtT(c.duration)} · ${fmtSize(c.size)} · ${c.width}x${c.height}${c.segments ? " · transcribed" : ""}</span>
       ${sync}
       <span class="extra"><button data-act="gyro" title="Use the gyro-stabilised file Gyroflow exported next to this clip">${c.original_path ? "Use original" : "Use Gyroflow export"}</button></span>
     </li>`;
   }).join("") || '<li class="muted">No clips yet</li>';
   $("#ovEmpty").classList.toggle("hidden", !!plan.parts.length);
+  const rec = mains.map((c) => c.recorded).filter(Boolean);
+  $("#sortClips").classList.toggle("hidden", rec.length < 2 || rec.every((r, i) => !i || rec[i - 1] <= r));
 }
+$("#sortClips").onclick = () => post("/api/clips/sort").then(loadState).then(() => toast("Clips are now in the order you recorded them.")).catch(fail);
 $("#clips").onclick = async (e) => {
   const li = e.target.closest("li[data-id]");
   if (!li || e.target.tagName === "SELECT" || e.target.tagName === "OPTION") return;
@@ -231,28 +234,41 @@ $("#pathForm").onsubmit = async (e) => {
 window.addEventListener("pywebviewready", () => ($("#dropHint").textContent = "Picked files are used in place; camera chapters join automatically"));
 
 // ---------------------------------------------------------------- programme plan & player
-const pv = $("#pv");
+const pv = $("#pv"), pv2 = $("#pv2");
 const introDur = () => +(plan.intro?.duration || 0);
 const outroStart = () => plan.parts.length ? plan.parts[plan.parts.length - 1].rec_end : introDur();
+let gen = 0, loading = false, selIds = new Set(), anchor = -1, snap = true;
 async function loadPlan() {
   plan = await api("/api/plan");
+  gfxVersion = Date.now(); $("#ovGfx").innerHTML = "";  // pages may have been rewritten (by you or an agent)
   const kept = plan.parts.filter((p) => !p.silent).reduce((a, p) => a + (p.rec_end - p.rec_start), 0);
   $("#summary").textContent = plan.parts.length ? `${plan.parts.length} parts · ${fmtT(plan.duration)} total${S.project.target_length ? " · target " + S.project.target_length : ""}` : "";
   $("#ovEmpty").classList.toggle("hidden", !!plan.parts.length);
-  if (sel >= plan.parts.length) sel = plan.parts.length - 1;
+  // selection is kept by item id, so it survives edits that renumber the parts
+  const ids = new Set(plan.parts.flatMap((p) => p.ids));
+  selIds = new Set([...selIds].filter((i) => ids.has(i)));
+  sel = plan.parts.findIndex((p) => p.ids.some((i) => selIds.has(i)));
   T = Math.min(T, plan.duration);
+  plan.parts.forEach((p) => loadMedia(p.clip));
   renderTimeline();
   renderInspector();
+  renderGraphicsList();
   if (!playing) await showAt(T, false);
   return kept;
 }
+const selected = () => plan.parts.map((p, i) => i).filter((i) => plan.parts[i].ids.some((x) => selIds.has(x)));
 function partAt(t) {
   if (t < introDur()) return "intro";
   if (t >= outroStart()) return plan.outro && t < plan.duration ? "outro" : -1;
   return plan.parts.findIndex((p) => t >= p.rec_start && t < p.rec_end);
 }
 const srcUrl = (p) => `/api/clips/${p.clip}/file${p.chapter != null ? "?chapter=" + p.chapter : ""}`;
-const once = (el, ev) => new Promise((res) => el.addEventListener(ev, res, { once: true }));
+// resolves on the event, or on error / after a timeout, so a broken file can never wedge the player
+const once = (el, ev, ms = 8000) => new Promise((res) => {
+  const done = () => { el.removeEventListener(ev, done); el.removeEventListener("error", done); clearTimeout(tm); res(); };
+  const tm = setTimeout(done, ms);
+  el.addEventListener(ev, done); el.addEventListener("error", done);
+});
 
 function gradeCss(g, effect) {
   if (!g) return "";
@@ -270,42 +286,102 @@ function card(kind) {
   $("#ovCard").classList.toggle("hidden", !c);
   if (c) { $("#cardTitle").textContent = c.title; $("#cardSub").textContent = c.subtitle || ""; $("#cardSub").classList.toggle("hidden", !c.subtitle); }
 }
+// Every call gets a generation number: a slower, older call (still loading another file) never overrides a newer
+// one, and nothing starts playing unless `playing` is still true when the file is ready (the old pause bug).
 async function showAt(t, play) {
+  const my = ++gen;
   T = Math.max(0, Math.min(t, plan.duration || 0));
   peek = false;
   if (mode === "rendered" && previewUrl) {
-    $("#ovCard").classList.add("hidden");
-    if (pv.dataset.url !== previewUrl) { pv.src = previewUrl; pv.dataset.url = previewUrl; await once(pv, "loadedmetadata"); }
+    $("#ovCard").classList.add("hidden"); hideCutaway();
+    if (pv.dataset.url !== previewUrl) { loading = true; pv.src = previewUrl; pv.dataset.url = previewUrl; await once(pv, "loadedmetadata"); loading = false; if (my !== gen) return; }
     pv.style.filter = pv.style.transform = ""; $("#ovVignette").style.opacity = 0; $("#ovTexts").innerHTML = "";
     pv.currentTime = T; pv.playbackRate = 1; pv.muted = false;
-    if (play) pv.play().catch(() => {});
+    if (play && playing) pv.play().catch(() => {}); else pv.pause();
     return draw();
   }
   const k = partAt(T);
-  if (k === "intro" || k === "outro") { pv.pause(); card(k); cur = k; return draw(); }
+  if (k === "intro" || k === "outro") { pv.pause(); hideCutaway(); card(k); cur = k; return draw(); }
   $("#ovCard").classList.add("hidden");
-  if (k < 0) { cur = -1; return draw(); }
+  if (k < 0) { cur = -1; pv.pause(); hideCutaway(); return draw(); }
   const p = plan.parts[k];
   cur = k;
   const url = srcUrl(p);
-  if (pv.dataset.url !== url) { pv.src = url; pv.dataset.url = url; await once(pv, "loadedmetadata"); }
+  if (pv.dataset.url !== url) {
+    loading = true; pv.pause(); pv.src = url; pv.dataset.url = url;
+    await once(pv, "loadedmetadata");
+    if (my !== gen) return;  // a newer seek took over; it owns `loading` now
+    loading = false;
+  }
   pv.currentTime = p.src_start + (T - p.rec_start) * p.speed;
   pv.playbackRate = Math.min(16, p.speed);
   pv.muted = !!p.silent;
   pv.style.filter = gradeCss(p.grade, p.effect);
   $("#ovVignette").style.opacity = Math.max(p.grade?.vignette || 0, p.effect === "vignette" ? 0.8 : 0);
-  if (play) await pv.play().catch(() => {});
+  if (play && playing) await pv.play().catch(() => {});
+  if (!playing) pv.pause();  // pressed pause while the file was loading
   draw();
 }
+function hideCutaway() { pv2.classList.add("hidden"); pv2.pause(); }
+function cutaway(p, lt) {  // B-roll laid over the talking: a second video on top, muted, kept in sync
+  const o = mode === "instant" && p ? (p.overlays || []).find((x) => lt >= x.t0 && lt < x.t1) : null;
+  if (!o) return hideCutaway();
+  const url = srcUrl(o), want = o.src_start + (lt - o.t0);
+  pv2.classList.remove("hidden");
+  pv2.style.filter = pv.style.filter;
+  if (pv2.dataset.url !== url) { pv2.src = url; pv2.dataset.url = url; pv2.muted = true; }
+  if (pv2.readyState >= 1 && Math.abs(pv2.currentTime - want) > 0.3) pv2.currentTime = want;
+  if (playing && pv2.paused) pv2.play().catch(() => {});
+  if (!playing && !pv2.paused) pv2.pause();
+}
+const textBox = (x, i, kind) => {
+  const pos = x.x != null ? `left:${x.x * 100}%;top:${x.y * 100}%;transform:translate(-50%,-50%);` : "";
+  const size = x.size ? `font-size:${(x.size * $("#monitor").clientHeight).toFixed(1)}px;` : "";
+  return `<div class="tx ${x.style} ${kind}" data-k="${i}" data-kind="${kind}" style="${pos}${size}" title="Drag to move · double-click to edit">${x.style === "caption" ? `<span>${esc(x.text)}</span>` : esc(x.text)}</div>`;
+};
+// Graphics pages run in sandboxed iframes (no access to LeanCut), scaled to the monitor; each draw asks the page
+// to draw its moment (window.film.frame(t)) through graphics-host.js, one request at a time per page.
+function graphicsAt(p, lt) {
+  const box = $("#ovGfx"), want = mode === "instant" && p ? (p.graphics || []).filter((g) => lt >= g.t0 && lt < g.t1) : [];
+  [...box.children].forEach((f) => { if (!want.some((g) => g.id === f.dataset.id)) f.remove(); });
+  const scale = $("#monitor").clientWidth / 1920;
+  for (const g of want) {
+    let f = box.querySelector(`[data-id="${g.id}"]`);
+    if (!f) {
+      f = document.createElement("iframe");
+      f.dataset.id = g.id; f.setAttribute("sandbox", "allow-scripts"); f.setAttribute("aria-hidden", "true");
+      f.src = `/api/graphics/page/${S.project.id}/${encodeURI(g.page.replace(/^graphics\//, ""))}?v=${gfxVersion}`;
+      f.onload = () => { f.dataset.ready = "1"; f.dataset.t = ""; };
+      box.appendChild(f);
+    }
+    f.style.transform = `scale(${scale})`;
+    const gt = +(lt - g.t0 + (g.in || 0)).toFixed(3);  // a graphic runs on across cuts: `in` is where this part picks it up
+    if (f.dataset.ready && f.dataset.t !== String(gt) && !(f._busy > performance.now() - 500)) {
+      f._busy = performance.now(); f.dataset.t = String(gt);
+      f.contentWindow.postMessage({ leancut: "frame", t: gt, id: g.id }, "*");
+    }
+  }
+}
+let gfxVersion = Date.now();
+window.addEventListener("message", (e) => {
+  if (e.data?.leancut !== "drawn" && e.data?.leancut !== "error") return;
+  const f = [...$$("#ovGfx iframe")].find((x) => x.contentWindow === e.source);
+  if (f) f._busy = 0;
+  if (e.data.leancut === "error" || e.data.ok === false) appendLog(`Graphic ${f?.dataset.id || ""}: ${e.data.error || "page error"}`, true);
+});
 function overlays() {
   const box = $("#ovTexts");
-  if (mode === "rendered" || typeof cur !== "number" || cur < 0) { box.innerHTML = ""; return; }
+  if (mode === "rendered" || typeof cur !== "number" || cur < 0) { if (!box.querySelector("[contenteditable]")) box.innerHTML = ""; hideCutaway(); graphicsAt(null, 0); return; }
   const p = plan.parts[cur], lt = T - p.rec_start, dur = p.rec_end - p.rec_start;
+  graphicsAt(p, lt);
   const scale = p.effect === "zoom" ? 1.15 : p.effect === "push_in" ? 1 + 0.12 * Math.min(1, lt / dur) : 1;
   pv.style.transform = scale !== 1 ? `scale(${scale.toFixed(4)})` : "";
-  const html = p.texts.filter((x) => lt >= x.t0 && lt < x.t1).map((x) => `<div class="tx ${x.style}">${esc(x.text)}</div>`);
-  html.push(...p.captions.filter((x) => lt >= x.t0 && lt < x.t1).map((x) => `<div class="tx caption"><span>${esc(x.text)}</span></div>`));
-  box.innerHTML = html.join("");
+  cutaway(p, lt);
+  if (box.querySelector("[contenteditable]") || dragging) return;  // don't redraw under the user's hands
+  const html = p.texts.map((x, i) => (lt >= x.t0 && lt < x.t1 ? textBox(x, i, "text") : "")).filter(Boolean);
+  html.push(...p.captions.map((x, i) => (lt >= x.t0 && lt < x.t1 ? textBox({ ...x, style: "caption" }, i, "cap") : "")).filter(Boolean));
+  const key = cur + "|" + html.join("");
+  if (box.dataset.key !== key) { box.innerHTML = html.join(""); box.dataset.key = key; }
   const next = plan.parts[cur + 1];  // approximate transitions as a short dip
   const into = p.transition && lt < 0.25 ? 1 - lt / 0.25 : 0;
   const out = next?.transition && dur - lt < 0.25 ? 1 - (dur - lt) / 0.25 : 0;
@@ -314,38 +390,42 @@ function overlays() {
 function draw() {
   overlays();
   $("#tc").textContent = `${fmtT(T)} / ${fmtT(plan.duration)}`;
-  const pps = pxPerSec();
-  $("#playhead").style.left = 64 + T * pps + "px";
+  $("#playhead").style.left = HEAD + T * pps() + "px";
   $("#playBtn").textContent = playing ? "❚❚" : "▶";
-  const k = partAt(T);
-  $$("#laneV .blk").forEach((b) => b.classList.toggle("sel", +b.dataset.i === sel));
+  $("#playBtn").setAttribute("aria-label", playing ? "Pause" : "Play");
+  if (playing) follow();
 }
 let lastFrame = 0;
 function loop(ts) {
   const dt = lastFrame ? (ts - lastFrame) / 1000 : 0;
   lastFrame = ts;
-  if (playing && !peek) {
+  if (playing && !peek && !loading) {
     if (mode === "rendered") { T = pv.currentTime; if (pv.ended) stop(); }
     else if (cur === "intro" || cur === "outro") {
       T += dt;
       if (cur === "intro" && T >= introDur()) showAt(T, true);
-      if (cur === "outro" && T >= plan.duration) { stop(); }
+      if (cur === "outro" && T >= plan.duration) stop();
     } else if (typeof cur === "number" && cur >= 0) {
       const p = plan.parts[cur];
       if (!pv.seeking) T = p.rec_start + (pv.currentTime - p.src_start) / p.speed;
       if (pv.currentTime >= p.src_end - 0.04 || pv.ended) {
         T = p.rec_end + 0.001;
-        if (T >= plan.duration - 0.01 && !plan.outro) stop(); else showAt(T, true);
+        if (T >= plan.duration - 0.01) stop(); else showAt(T, true);
       }
-    } else stop();
+    } else if (T < plan.duration - 0.01) showAt(T, true); else stop();
     draw();
   }
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);
 function play() { if (!plan.parts.length) return; playing = true; if (T >= plan.duration - 0.05) T = 0; showAt(T, true); }
-function stop() { playing = false; pv.pause(); draw(); }
-$("#playBtn").onclick = () => (playing ? stop() : play());
+function stop() { playing = false; pv.pause(); pv2.pause(); draw(); }
+const toggle = () => (playing ? stop() : play());
+$("#playBtn").onclick = toggle;
+if (navigator.mediaSession) {  // keyboard media keys / headphones drive the same state
+  navigator.mediaSession.setActionHandler("play", play);
+  navigator.mediaSession.setActionHandler("pause", stop);
+}
 function syncMode() {
   $("#modeInstant").classList.toggle("on", mode === "instant");
   $("#modeRendered").classList.toggle("on", mode === "rendered");
@@ -355,10 +435,126 @@ $("#modeInstant").onclick = () => { mode = "instant"; syncMode(); pv.dataset.url
 $("#modeRendered").onclick = () => { if (!previewUrl) return; mode = "rendered"; syncMode(); showAt(T, playing); };
 $("#previewBtn").onclick = () => startJob("/api/preview");
 
+// ---------------------------------------------------------------- text right on the video
+// The item (transcript line / B-roll window) under the playhead, and how far into it we are, in source seconds.
+function itemAtPlayhead() {
+  const p = typeof cur === "number" ? plan.parts[cur] : null;
+  if (!p || !p.ids.length) return null;
+  const src = p.start + (T - p.rec_start) * p.speed;
+  const its = p.ids.map((id) => ({ id, it: item(id) })).filter((x) => x.it);
+  const hit = its.find((x) => src >= x.it.start && src < x.it.end) || its.reduce((a, b) => (Math.abs(b.it.start - src) < Math.abs(a.it.start - src) ? b : a));
+  return { id: hit.id, offset: Math.max(0, src - hit.it.start), src, part: p };
+}
+$("#addTextBtn").onclick = async () => {
+  const at = itemAtPlayhead();
+  if (!at) return toast("Move the playhead onto a part of the video first.", true);
+  stop();
+  await act([{ type: "text", ids: [at.id], text: "Your text", value: "plain", offset: at.offset, duration: 4, x: 0.5, y: 0.45 }]);
+  showAt(T + 0.01, false);
+  const el = [...$$("#ovTexts .tx.text")].find((e) => e.textContent === "Your text");
+  if (el) editOnMonitor(el);
+};
+let dragging = false;
+function textRef(el) {
+  const p = plan.parts[cur], k = +el.dataset.k;
+  return el.dataset.kind === "cap" ? { cap: p.captions[k] } : { text: p.texts[k] };
+}
+function editOnMonitor(el) {
+  const ref = textRef(el), target = el.querySelector("span") || el;
+  stop();
+  target.contentEditable = "true"; target.focus();
+  document.getSelection().selectAllChildren(target);
+  const finish = async (save) => {
+    target.removeEventListener("blur", onBlur);
+    target.contentEditable = "false";
+    const v = target.textContent.trim();
+    $("#ovTexts").dataset.key = "";
+    if (!save) return draw();
+    if (ref.cap) {
+      if (v && v !== ref.cap.text) { const [, ci, k, i] = /^c(\d+)\.(s)(\d+)$/.exec(ref.cap.id); await patchItem(S.project.clips[+ci].id, "segments", +i, { text: v }); }
+    } else if (ref.text.card) {
+      const c = S.project[ref.text.card];
+      if (v !== ref.text.text) await act([{ type: ref.text.card, text: ref.text.style === "caption" ? c.title : v, value: ref.text.style === "caption" ? v : c.subtitle, style: c.style, duration: c.duration, over: true }]);
+    } else if (v !== ref.text.text) await act([{ type: "edit_text", ids: [ref.text.item], index: ref.text.index, text: v }]);
+    draw();
+  };
+  const onBlur = () => finish(true);
+  target.addEventListener("blur", onBlur);
+  target.onkeydown = (e) => {
+    e.stopPropagation();
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); target.blur(); }
+    if (e.key === "Escape") { target.removeEventListener("blur", onBlur); target.textContent = ref.cap?.text ?? ref.text.text; finish(false); }
+  };
+}
+$("#ovTexts").addEventListener("dblclick", (e) => { const el = e.target.closest(".tx"); if (el) editOnMonitor(el); });
+$("#ovTexts").addEventListener("pointerdown", (e) => {
+  const el = e.target.closest(".tx.text");
+  if (!el || el.querySelector("[contenteditable=true]") || el.isContentEditable) return;
+  const ref = textRef(el).text;
+  if (!ref || ref.card) return;  // intro/outro titles keep their layout
+  e.preventDefault();
+  const box = $("#monitor").getBoundingClientRect();
+  let x = ref.x ?? 0.5, y = ref.y ?? 0.5, moved = false;
+  const sx = e.clientX, sy = e.clientY;
+  dragging = true; stop();
+  const move = (ev) => {
+    if (Math.hypot(ev.clientX - sx, ev.clientY - sy) < 3 && !moved) return;
+    moved = true;
+    x = Math.max(0.02, Math.min(0.98, (ev.clientX - box.left) / box.width));
+    y = Math.max(0.03, Math.min(0.97, (ev.clientY - box.top) / box.height));
+    if (snap && Math.abs(x - 0.5) < 0.02) x = 0.5;  // centre line
+    Object.assign(el.style, { left: x * 100 + "%", top: y * 100 + "%", right: "auto", bottom: "auto", transform: "translate(-50%,-50%)" });
+  };
+  const up = async () => {
+    window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up);
+    dragging = false;
+    if (moved) await act([{ type: "edit_text", ids: [ref.item], index: ref.index, x, y }]);
+  };
+  window.addEventListener("pointermove", move); window.addEventListener("pointerup", up);
+});
+$("#monitor").addEventListener("wheel", (e) => {  // resize the text under the pointer
+  const el = e.target.closest(".tx.text");
+  if (!el) return;
+  const ref = textRef(el).text;
+  if (!ref || ref.card) return;
+  e.preventDefault();
+  const size = Math.max(0.02, Math.min(0.3, (ref.size || 0.05) * (e.deltaY < 0 ? 1.08 : 0.92)));
+  ref.size = size; el.style.fontSize = size * $("#monitor").clientHeight + "px";
+  clearTimeout(el._t); el._t = setTimeout(() => act([{ type: "edit_text", ids: [ref.item], index: ref.index, size }]), 400);
+}, { passive: false });
+
 // ---------------------------------------------------------------- timeline
-function pxPerSec() {
-  const w = Math.max(400, $("#timeline").clientWidth - 70);
-  return (w / Math.max(plan.duration, 1)) * +$("#zoom").value;
+const HEAD = 72;  // track-name column
+const tl = $("#timeline");
+const media = {};  // clip id -> {strip: {img, meta}, peaks}
+function loadMedia(cid) {
+  if (media[cid]) return;
+  const m = (media[cid] = {});
+  api(`/api/clips/${cid}/peaks`).then((r) => { m.peaks = r; paintLanes(); }).catch(() => {});
+  api(`/api/clips/${cid}/strip`).then((meta) => {
+    const img = new Image();
+    img.onload = () => { m.strip = { img, meta }; paintLanes(); };
+    img.src = meta.url;
+  }).catch(() => {});
+}
+let zoomZ = 1;  // pixels per second = fit × zoomZ
+const fitPps = () => Math.max(300, tl.clientWidth - HEAD - 20) / Math.max(plan.duration, 1);
+const pps = () => fitPps() * zoomZ;
+function setZoom(z, anchorT) {
+  const t = anchorT ?? T, before = HEAD + t * pps() - tl.scrollLeft;
+  zoomZ = Math.max(1, Math.min(400, z));
+  $("#zoom").value = Math.round(Math.log2(zoomZ) * 12);
+  renderTimeline();
+  tl.scrollLeft = HEAD + t * pps() - before;
+}
+$("#zoom").oninput = (e) => setZoom(2 ** (+e.target.value / 12));
+$("#zoomIn").onclick = () => setZoom(zoomZ * 1.5);
+$("#zoomOut").onclick = () => setZoom(zoomZ / 1.5);
+$("#zoomFit").onclick = () => setZoom(1);
+$("#snapBtn").onclick = () => { snap = !snap; $("#snapBtn").classList.toggle("on", snap); };
+function follow() {  // keep the playhead in view while playing
+  const x = HEAD + T * pps();
+  if (x > tl.scrollLeft + tl.clientWidth - 40 || x < tl.scrollLeft + HEAD) tl.scrollLeft = x - HEAD - 40;
 }
 const isBroll = (p) => p.ids.length && p.ids.every((i) => i.includes(".b"));
 function label(p) {
@@ -367,53 +563,258 @@ function label(p) {
   const it = item(p.ids[0]);
   return spoken?.text || ("B-roll" + (it?.reason ? " · " + it.reason : ""));
 }
+const clipIdx = (cid) => S.project.clips.findIndex((c) => c.id === cid);
 function renderTimeline() {
-  const pps = pxPerSec(), W = plan.duration * pps;
-  ["#laneV", "#laneT", "#laneA"].forEach((s) => ($(s).style.width = W + "px"));
-  $("#ruler").style.width = W + "px";
-  const step = [1, 2, 5, 10, 15, 30, 60, 120, 300].find((s) => s * pps >= 60) || 600;
+  const k = pps(), W = Math.max(plan.duration * k, 10);
+  $$(".timeline .lane, #ruler").forEach((el) => (el.style.width = W + "px"));
+  const step = [0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600].find((s) => s * k >= 70) || 1200;
   let ticks = "";
-  for (let t = 0; t <= plan.duration; t += step) ticks += `<span style="left:${t * pps}px">${fmtT(t).replace(/\.\d$/, "")}</span>`;
+  for (let t = 0; t <= plan.duration; t += step) ticks += `<span style="left:${t * k}px">${fmtT(t).replace(/\.0$/, "")}</span>`;
   $("#ruler").innerHTML = ticks;
   const blk = (cls, x, w, inner, attrs = "") => `<div class="blk ${cls}" style="left:${x}px;width:${Math.max(3, w - 1)}px" ${attrs}>${inner}</div>`;
-  let v = "";
-  if (plan.intro) v += blk("card", 0, introDur() * pps, "Intro · " + esc(plan.intro.title), 'data-card="intro"');
+  const sels = new Set(selected());
+  let v = "", a = "", b = "", t = "", vo = "", g = "";
+  if (plan.intro) v += blk("card", 0, introDur() * k, "Intro · " + esc(plan.intro.title), 'data-card="intro"');
   plan.parts.forEach((p, i) => {
+    const x = p.rec_start * k, w = (p.rec_end - p.rec_start) * k;
     const fx = [p.effect !== "none" && p.effect, p.speed !== 1 && !p.silent && `${p.speed}×`].filter(Boolean);
-    v += blk(`${isBroll(p) ? "broll" : ""} ${p.silent ? "ff" : ""}`, p.rec_start * pps, (p.rec_end - p.rec_start) * pps,
-      `${p.transition ? '<span class="tr" title="' + esc(p.transition.type) + '"></span>' : ""}${esc(label(p))}${fx.map((f) => `<span class="fx">${esc(f)}</span>`).join("")}`,
+    const cls = `${isBroll(p) ? "broll" : ""} ${p.silent ? "ff" : ""} c${clipIdx(p.clip) % 4} ${sels.has(i) ? "sel" : ""}`;
+    const handles = p.ids.length ? '<b class="h l" data-edge="l"></b><b class="h r" data-edge="r"></b>' : "";
+    v += blk(cls, x, w, `${p.transition ? `<span class="tr" title="${esc(p.transition.type)}"></span>` : ""}<span class="lbl">${esc(label(p))}</span>${fx.map((f) => `<span class="fx">${esc(f)}</span>`).join("")}${handles}`,
       `data-i="${i}" title="${esc(label(p))}"`);
+    a += blk(`${cls} wave`, x, w, "", `data-i="${i}"`);
+    p.overlays.forEach((o) => (b += blk(`broll over ${selIds.has(o.id) ? "sel" : ""}`, (p.rec_start + o.t0) * k, (o.t1 - o.t0) * k, `<span class="lbl">${esc(item(o.id)?.reason || "B-roll")}</span>`, `data-o="${o.id}" data-i="${i}" title="B-roll over the talking · drag to move"`)));
+    p.texts.forEach((x, j) => (t += blk(`text ${x.card ? "cardtx" : ""}`, (p.rec_start + x.t0) * k, (x.t1 - x.t0) * k, `${esc(x.text)}${x.card ? "" : '<b class="h r" data-edge="r"></b>'}`, `data-i="${i}" data-t="${j}" title="${esc(x.text)} · drag to move, double-click to edit"`)));
+    (p.graphics || []).filter((x) => !x.in).forEach((x) => (g += blk("gfx", (p.rec_start + x.t0) * k, x.full * k, `<span class="lbl">✦ ${esc(x.template || x.page.replace(/^graphics\/|\.html$/g, ""))}</span><b class="h r" data-edge="r"></b>`, `data-i="${i}" data-g="${x.id}" title="${esc(x.page)} · drag to move, drag the end to change its length"`)));
+    p.voiceovers.forEach((x) => (vo += blk("vo", (p.rec_start + x.t0) * k, Math.max(2, x.text.split(" ").length / 2.6) * k, "🎙 " + esc(x.text), `data-i="${i}"`)));
   });
-  if (plan.outro) v += blk("card", outroStart() * pps, (plan.duration - outroStart()) * pps, "Outro · " + esc(plan.outro.title), 'data-card="outro"');
-  $("#laneV").innerHTML = v;
-  $("#laneT").innerHTML = plan.parts.flatMap((p, i) => p.texts.map((x) => blk("text", (p.rec_start + x.t0) * pps, (x.t1 - x.t0) * pps, esc(x.text), `data-i="${i}"`))).join("");
-  $("#laneA").innerHTML = plan.parts.flatMap((p, i) => p.voiceovers.map((x) => blk("vo", (p.rec_start + x.t0) * pps, Math.max(2, x.text.split(" ").length / 2.6) * pps, "🎙 " + esc(x.text), `data-i="${i}"`))).join("");
+  if (plan.outro) v += blk("card", outroStart() * k, (plan.duration - outroStart()) * k, "Outro · " + esc(plan.outro.title), 'data-card="outro"');
+  $("#laneV").innerHTML = v; $("#laneA").innerHTML = a; $("#laneB").innerHTML = b; $("#laneT").innerHTML = t; $("#laneVO").innerHTML = vo; $("#laneG").innerHTML = g;
+  $("#selInfo").textContent = sels.size > 1 ? `${sels.size} parts selected` : "";
+  paintLanes();
   draw();
 }
-$("#zoom").oninput = renderTimeline;
+// Filmstrip and waveform: one canvas per lane, the size of the visible window, redrawn on scroll/zoom.
+let paintReq = 0;
+function paintLanes() { cancelAnimationFrame(paintReq); paintReq = requestAnimationFrame(paint); }
+tl.addEventListener("scroll", paintLanes);
 window.addEventListener("resize", () => renderTimeline());
-$("#timeline").addEventListener("click", (e) => {
-  const b = e.target.closest(".blk");
-  if (b?.dataset.i != null) { select(+b.dataset.i, true); return; }
-  if (b?.dataset.card) { showAt(b.dataset.card === "intro" ? 0 : outroStart(), playing); openPane("look"); return; }
-  const r = $("#laneV").getBoundingClientRect();
-  if (e.clientX >= r.left) showAt((e.clientX - r.left) / pxPerSec(), playing);
-});
-function select(i, seek) {
-  sel = i;
-  renderInspector();
-  openPane("insp");
-  if (seek && plan.parts[i]) showAt(plan.parts[i].rec_start + 0.01, playing);
-  draw();
+function canvasFor(lane) {
+  let cv = lane.parentElement.querySelector("canvas");
+  if (!cv) { cv = document.createElement("canvas"); lane.parentElement.insertBefore(cv, lane); }
+  const dpr = devicePixelRatio || 1, w = Math.max(10, tl.clientWidth - HEAD), h = lane.clientHeight;
+  if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); cv.style.width = w + "px"; cv.style.height = h + "px"; }
+  cv.style.left = HEAD + tl.scrollLeft + "px";
+  const g = cv.getContext("2d");
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.clearRect(0, 0, w, h);
+  return { g, w, h };
 }
+function paint() {
+  const k = pps(), x0 = tl.scrollLeft;
+  const V = canvasFor($("#laneV")), A = canvasFor($("#laneA"));
+  for (const p of plan.parts) {
+    const L = p.rec_start * k - x0, R = p.rec_end * k - x0;
+    if (R < 0 || L > V.w) continue;
+    const m = media[p.clip] || {}, srcAt = (x) => p.start + ((x + x0) / k - p.rec_start) * p.speed;
+    if (m.strip) {  // thumbnails across the block, each showing the frame under it
+      const { img, meta } = m.strip, th = V.h - 2, tw = th * 16 / 9;
+      V.g.save(); V.g.beginPath(); V.g.rect(Math.max(0, L), 0, Math.min(V.w, R) - Math.max(0, L), V.h); V.g.clip();
+      V.g.globalAlpha = p.silent ? 0.35 : 0.75;
+      for (let x = Math.max(L, L + Math.floor((0 - L) / tw) * tw); x < Math.min(R, V.w); x += tw) {
+        const f = Math.max(0, Math.min(meta.n - 1, Math.round(srcAt(x + tw / 2) / meta.step)));
+        V.g.drawImage(img, (f % meta.cols) * meta.w, Math.floor(f / meta.cols) * meta.h, meta.w, meta.h, x, 1, tw, th);
+      }
+      V.g.restore();
+    }
+    if (m.peaks && !p.silent) {  // waveform, mirrored around the middle
+      const pk = m.peaks.peaks, rate = m.peaks.rate, mid = A.h / 2;
+      A.g.fillStyle = isBroll(p) ? "#d9a53a" : "#58c98b";
+      for (let x = Math.max(0, Math.floor(L)); x < Math.min(R, A.w); x++) {
+        const i0 = Math.floor(srcAt(x) * rate), i1 = Math.max(i0 + 1, Math.floor(srcAt(x + 1) * rate));
+        let v = 0;
+        for (let i = i0; i < i1 && i < pk.length; i++) v = Math.max(v, pk[i]);
+        const hgt = Math.max(1, (v / 255) * (mid - 2));
+        A.g.fillRect(x, mid - hgt, 1, hgt * 2);
+      }
+    }
+  }
+}
+// time under the pointer, snapped to part edges / the playhead when it's close (8 px)
+function timeAt(clientX, snapIt = snap) {
+  const r = $("#laneV").getBoundingClientRect();
+  let t = Math.max(0, Math.min(plan.duration, (clientX - r.left) / pps()));
+  if (snapIt) {
+    const edges = plan.parts.flatMap((p) => [p.rec_start, p.rec_end]);
+    const near = edges.reduce((a, e) => (Math.abs(e - t) < Math.abs(a - t) ? e : a), Infinity);
+    if (Math.abs(near - t) * pps() < 8) t = near;
+  }
+  return t;
+}
+function selectPart(i, e) {
+  const p = plan.parts[i];
+  if (!p) return;
+  if (e?.shiftKey && anchor >= 0) {
+    const [a, b] = [Math.min(anchor, i), Math.max(anchor, i)];
+    plan.parts.slice(a, b + 1).forEach((q) => q.ids.forEach((x) => selIds.add(x)));
+  } else if (e?.metaKey || e?.ctrlKey) {
+    const on = p.ids.some((x) => selIds.has(x));
+    p.ids.forEach((x) => (on ? selIds.delete(x) : selIds.add(x)));
+    anchor = i;
+  } else { selIds = new Set(p.ids); anchor = i; }
+  sel = selected()[0] ?? -1;
+  renderTimeline(); renderInspector(); openPane("insp");
+}
+function select(i, seek) {  // keyboard / deep links / suggestions
+  if (!plan.parts[i]) return;
+  selIds = new Set(plan.parts[i].ids); anchor = sel = i;
+  renderTimeline(); renderInspector(); openPane("insp");
+  if (seek) showAt(plan.parts[i].rec_start + 0.01, playing);
+}
+// drags on the timeline: scrub (ruler / empty space), trim part edges, move titles and cutaways
+tl.addEventListener("pointerdown", (e) => {
+  if (e.button !== 0) return;
+  const b = e.target.closest(".blk"), edge = e.target.dataset.edge;
+  if (b?.dataset.card) { showAt(b.dataset.card === "intro" ? 0 : outroStart(), playing); openPane("look"); return; }
+  if (b && edge && b.dataset.i != null && b.parentElement.id === "laneV") return trimDrag(e, +b.dataset.i, edge, b);
+  if (b && b.dataset.t != null) return textDrag(e, +b.dataset.i, +b.dataset.t, b, edge);
+  if (b && b.dataset.o) return overlayDrag(e, +b.dataset.i, b.dataset.o, b);
+  if (b && b.dataset.g) return graphicDrag(e, +b.dataset.i, b.dataset.g, b, edge);
+  if (b && b.dataset.i != null) { selectPart(+b.dataset.i, e); if (!e.shiftKey && !e.metaKey && !e.ctrlKey) showAt(timeAt(e.clientX, false), playing); return; }
+  if (e.clientX - tl.getBoundingClientRect().left < HEAD) return;
+  const was = playing; stop();  // scrub
+  const move = (ev) => { T = timeAt(ev.clientX); showAt(T, false); };
+  move(e);
+  const up = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); if (was) play(); };
+  window.addEventListener("pointermove", move); window.addEventListener("pointerup", up);
+});
+function ghost(b, txt) { toast(txt); b.classList.add("drag"); }
+function trimDrag(e, i, edge, b) {
+  e.preventDefault(); e.stopPropagation(); stop();
+  const p = plan.parts[i], id = edge === "l" ? p.ids[0] : p.ids[p.ids.length - 1], it = item(id), k = pps();
+  const x0 = e.clientX, L = parseFloat(b.style.left), W = parseFloat(b.style.width);
+  const words = (it.text ? wordsOf(it) : []).flatMap((w) => [w[1], w[2]]);
+  let value = edge === "l" ? it.start : it.end;
+  const move = (ev) => {
+    const d = ((ev.clientX - x0) / k) * p.speed;
+    value = edge === "l" ? Math.max(0, Math.min(it.end - 0.2, it.start + d)) : Math.max(it.start + 0.2, it.end + d);
+    if (snap && words.length) {  // land between words, not in the middle of one
+      const near = words.reduce((a, w) => (Math.abs(w - value) < Math.abs(a - value) ? w : a));
+      if (Math.abs(near - value) / p.speed * k < 10) value = near;
+    }
+    const px = ((value - (edge === "l" ? it.start : it.end)) / p.speed) * k;
+    if (edge === "l") { b.style.left = L + px + "px"; b.style.width = W - px + "px"; } else b.style.width = W + px + "px";
+    ghost(b, `${edge === "l" ? "Start" : "End"} of ${id}: ${fmtT(value)} (${px >= 0 === (edge === "r") ? "longer" : "shorter"})`);
+    showAt(p.rec_start + ((edge === "l" ? value - p.start : value - p.start) / p.speed), false);
+  };
+  const up = () => {
+    window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up);
+    act([{ type: "trim", ids: [id], [edge === "l" ? "start" : "end"]: +value.toFixed(2) }]);
+  };
+  window.addEventListener("pointermove", move); window.addEventListener("pointerup", up);
+}
+function textDrag(e, i, j, b, edge) {
+  e.preventDefault(); e.stopPropagation();
+  const p = plan.parts[i], x = p.texts[j], k = pps(), x0 = e.clientX, L = parseFloat(b.style.left), W = parseFloat(b.style.width);
+  if (x.card) { openPane("look"); return; }
+  const base = item(x.item), off0 = base ? (base.texts || [])[x.index]?.offset || 0 : 0, dur0 = x.t1 - x.t0;
+  let off = off0, dur = dur0, moved = false;
+  const move = (ev) => {
+    const d = (ev.clientX - x0) / k;
+    moved = moved || Math.abs(ev.clientX - x0) > 3;
+    if (edge) { dur = Math.max(0.5, dur0 + d); b.style.width = dur * k + "px"; ghost(b, `Title length ${dur.toFixed(1)} s`); }
+    else { off = Math.max(0, off0 + d * p.speed); b.style.left = L + (off - off0) / p.speed * k + "px"; ghost(b, `Title starts ${off.toFixed(1)} s into ${x.item}`); }
+  };
+  const up = () => {
+    window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up);
+    if (moved) act([{ type: "edit_text", ids: [x.item], index: x.index, ...(edge ? { duration: +dur.toFixed(2) } : { offset: +off.toFixed(2) }) }]);
+    else showAt(p.rec_start + x.t0 + 0.05, false);
+  };
+  window.addEventListener("pointermove", move); window.addEventListener("pointerup", up);
+  b.ondblclick = () => { showAt(p.rec_start + x.t0 + 0.05, false); setTimeout(() => { const el = $("#ovTexts").querySelector(`.tx.text[data-k="${j}"]`); if (el) editOnMonitor(el); }, 150); };
+}
+function overlayDrag(e, i, oid, b) {
+  e.preventDefault(); e.stopPropagation();
+  const p = plan.parts[i], o = p.overlays.find((x) => x.id === oid), w = item(oid), k = pps(), x0 = e.clientX, L = parseFloat(b.style.left);
+  const line = item(w.over), off0 = w.offset ?? 1;
+  let off = off0, moved = false;
+  selIds = new Set([oid]); renderInspector(); openPane("insp");
+  const move = (ev) => {
+    moved = moved || Math.abs(ev.clientX - x0) > 3;
+    off = Math.max(0, Math.min(line.end - line.start - 0.5, off0 + (ev.clientX - x0) / k * p.speed));
+    b.style.left = L + (off - off0) / p.speed * k + "px";
+    ghost(b, `B-roll starts ${off.toFixed(1)} s into the line`);
+  };
+  const up = () => {
+    window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up);
+    if (moved) act([{ type: "broll_mode", ids: [oid], value: "cutaway", over: w.over, offset: +off.toFixed(2) }]);
+    else showAt(p.rec_start + o.t0 + 0.05, false);
+  };
+  window.addEventListener("pointermove", move); window.addEventListener("pointerup", up);
+}
+const tool = (name, args) => post("/api/agent/call", { name, arguments: args }).then((r) => {
+  if (r.isError) throw new Error(r.content?.[0]?.text || name + " failed");
+  return r;
+});
+function graphicDrag(e, i, gid, b, edge) {
+  e.preventDefault(); e.stopPropagation();
+  const p = plan.parts[i], x = p.graphics.find((q) => q.id === gid), k = pps(), x0 = e.clientX;
+  const L = parseFloat(b.style.left), W = parseFloat(b.style.width);
+  let at = p.rec_start + x.t0, dur = x.full, moved = false;
+  const move = (ev) => {
+    const d = (ev.clientX - x0) / k;
+    moved = moved || Math.abs(ev.clientX - x0) > 3;
+    if (edge) { dur = Math.max(0.3, x.full + d); b.style.width = dur * k + "px"; ghost(b, `Graphic length ${dur.toFixed(1)} s`); }
+    else { at = Math.max(0, p.rec_start + x.t0 + d); b.style.left = L + d * k + "px"; ghost(b, `Graphic starts at ${fmtT(at)}`); }
+  };
+  const up = async () => {
+    window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up);
+    if (!moved) return showAt(p.rec_start + x.t0 + 0.05, false);
+    try { await tool("update_graphic", edge ? { id: gid, duration: +dur.toFixed(2) } : { id: gid, at: +at.toFixed(2) }); await refresh(); } catch (err) { fail(err); renderTimeline(); }
+  };
+  window.addEventListener("pointermove", move); window.addEventListener("pointerup", up);
+}
+async function refresh() { S = await api("/api/state"); afterEdit({}); }
+tl.addEventListener("wheel", (e) => {
+  if (e.ctrlKey || e.metaKey) {  // pinch / ⌘-scroll zooms around the pointer
+    e.preventDefault();
+    setZoom(zoomZ * Math.exp(-e.deltaY * 0.01), timeAt(e.clientX, false));
+  } else if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) { e.preventDefault(); tl.scrollLeft += e.deltaY; }
+}, { passive: false });
+function splitAtPlayhead() {
+  const at = itemAtPlayhead();
+  if (!at) return toast("Put the playhead on a part to split it.", true);
+  act([{ type: "split", ids: [at.id], start: +at.src.toFixed(2) }]);
+}
+function cutSelection() {
+  const ids = selected().flatMap((i) => plan.parts[i].ids);
+  const overs = [...selIds].filter((x) => !ids.includes(x));
+  if (ids.length || overs.length) act([{ type: "cut", ids: [...ids, ...overs] }]);
+}
+$("#splitBtn").onclick = splitAtPlayhead;
+$("#cutBtn").onclick = cutSelection;
 document.addEventListener("keydown", (e) => {
-  if (e.target.matches("input, textarea, select") || $("#editor").classList.contains("hidden")) return;
-  const mod = e.metaKey || e.ctrlKey;
-  if (e.code === "Space") { e.preventDefault(); playing ? stop() : play(); }
+  if (e.target.matches?.("input, textarea, select, [contenteditable=true]") || $("#editor").classList.contains("hidden")) return;
+  const mod = e.metaKey || e.ctrlKey, key = e.key.toLowerCase();
+  // a focused button would also "click" on Space, toggling twice: take focus off it first
+  if (e.code === "Space" || key === "k") { e.preventDefault(); if (e.target.closest("button")) e.target.blur(); key === "k" ? stop() : toggle(); return; }
+  if ((e.key === "Delete" || e.key === "Backspace") && wordSelection()) { e.preventDefault(); return cutWords(); }
+  if (mod && key === "z") { e.preventDefault(); (e.shiftKey ? $("#redoBtn") : $("#undoBtn")).click(); }
+  else if (mod && key === "a") { e.preventDefault(); selIds = new Set(plan.parts.flatMap((p) => p.ids)); sel = 0; renderTimeline(); renderInspector(); }
+  else if (mod) return;
   else if (e.key === "ArrowRight") { e.preventDefault(); select(Math.min(plan.parts.length - 1, sel + 1), true); }
   else if (e.key === "ArrowLeft") { e.preventDefault(); select(Math.max(0, sel - 1), true); }
-  else if ((e.key === "Delete" || e.key === "Backspace") && sel >= 0 && plan.parts[sel]?.ids.length) { e.preventDefault(); act([{ type: "cut", ids: plan.parts[sel].ids }]); }
-  else if (mod && e.key.toLowerCase() === "z") { e.preventDefault(); (e.shiftKey ? $("#redoBtn") : $("#undoBtn")).click(); }
+  else if (e.key === "," || e.key === ".") { stop(); showAt(T + (e.key === "," ? -1 : 1) / 30, false); }
+  else if (key === "j") showAt(Math.max(0, T - 5), playing);
+  else if (key === "l") play();
+  else if (key === "s" || key === "b") splitAtPlayhead();
+  else if (key === "t") $("#addTextBtn").click();
+  else if (e.key === "+" || e.key === "=") setZoom(zoomZ * 1.5);
+  else if (e.key === "-") setZoom(zoomZ / 1.5);
+  else if (e.key === "Home") showAt(0, playing);
+  else if (e.key === "End") showAt(plan.duration - 0.05, false);
+  else if (e.key === "Escape") { selIds = new Set(); sel = -1; renderTimeline(); renderInspector(); }
+  else if ((e.key === "Delete" || e.key === "Backspace") && selIds.size) { e.preventDefault(); cutSelection(); }
 });
 $("#undoBtn").onclick = () => post("/api/undo").then(afterEdit).catch(fail);
 $("#redoBtn").onclick = () => post("/api/redo").then(afterEdit).catch(fail);
@@ -428,8 +829,12 @@ function item(id) {
 const opts = (obj, v) => Object.entries(obj).map(([k, n]) => `<option value="${k}" ${k === v ? "selected" : ""}>${esc(typeof n === "string" ? n : k.replace("_", " "))}</option>`).join("");
 function renderInspector() {
   const box = $("#pane-insp");
+  const many = selected();
+  const over = [...selIds].find((x) => item(x)?.over && !many.length);
+  if (over) return renderCutaway(box, over);
+  if (many.length > 1) return renderMulti(box, many);
   const p = plan.parts[sel];
-  if (!p) { box.innerHTML = '<p class="muted">Select a part on the timeline.</p>'; return; }
+  if (!p) { box.innerHTML = '<p class="muted">Select a part on the timeline (⇧-click or ⌘-click to select several). Space plays, S splits at the playhead, T adds text on the video.</p>'; return; }
   const first = item(p.ids[0]), last = item(p.ids[p.ids.length - 1]);
   const texts = p.ids.flatMap((id) => (item(id)?.texts || []).map((t) => ({ ...t, id })));
   const vos = p.ids.flatMap((id) => (item(id)?.voiceovers || []).map((t) => ({ ...t, id })));
@@ -440,7 +845,7 @@ function renderInspector() {
       <p class="small">${p.ids.map((i) => `<span class="chip">${i}</span>`).join(" ")}</p>
       <p class="small muted">${fmtT(p.start)}–${fmtT(p.end)} of ${esc(S.project.clips.find((c) => c.id === p.clip)?.name)} · ${fmtT(p.rec_end - p.rec_start)} in the video</p>
       <p class="small">${p.silent ? "Fast-forward ride-through" : esc(isBroll(p) ? "Scenic B-roll" : p.ids.map((i) => item(i)?.text).join(" "))}</p>
-      <div class="row wrap"><button id="iPlay">▶ Play from here</button>${p.ids.length ? '<button id="iCut">Cut this part</button>' : ""}</div>
+      <div class="row wrap"><button id="iPlay">▶ Play from here</button>${p.ids.length ? '<button id="iCut">Cut this part</button><button id="iSplit" title="S">Split at playhead</button>' : ""}${isBroll(p) ? '<button id="iOver" title="Show this B-roll over the nearest line you say, instead of on its own">Lay over the talking</button>' : ""}</div>
       ${first && last ? `<label>Trim start (s) <input type="number" id="iStart" step="0.1" value="${first.start}"></label>
       <label>Trim end (s) <input type="number" id="iEnd" step="0.1" value="${last.end}"></label>` : ""}
     </fieldset>
@@ -467,8 +872,10 @@ function renderInspector() {
       ${sugs.map((x) => sugCard(x)).join("") || '<p class="muted small">None. Ask the assistant for ideas.</p>'}
     </fieldset></div>`;
   const id0 = p.ids[0];
-  $("#iPlay").onclick = () => { showAt(p.rec_start + 0.01, true); playing = true; };
+  $("#iPlay").onclick = () => { playing = true; showAt(p.rec_start + 0.01, true); };
   $("#iCut") && ($("#iCut").onclick = () => act([{ type: "cut", ids: p.ids }]));
+  $("#iSplit") && ($("#iSplit").onclick = splitAtPlayhead);
+  $("#iOver") && ($("#iOver").onclick = () => act([{ type: "broll_mode", ids: p.ids, value: "cutaway" }]));
   $("#iStart") && ($("#iStart").onchange = (e) => act([{ type: "trim", ids: [p.ids[0]], start: +e.target.value }]));
   $("#iEnd") && ($("#iEnd").onchange = (e) => act([{ type: "trim", ids: [p.ids[p.ids.length - 1]], end: +e.target.value }]));
   if (!p.ids.length) return;
@@ -484,6 +891,81 @@ function renderInspector() {
   bindSugs(box);
 }
 
+function renderMulti(box, many) {  // one edit for every selected part
+  const ids = many.flatMap((i) => plan.parts[i].ids), len = many.reduce((a, i) => a + plan.parts[i].rec_end - plan.parts[i].rec_start, 0);
+  box.innerHTML = `<div class="insp">
+    <fieldset><legend>${many.length} parts selected · ${fmtT(len)}</legend>
+      <p class="small muted">Changes here apply to all of them. ⇧-click extends the selection, ⌘-click adds or removes one, Esc clears.</p>
+      <div class="row wrap"><button id="mCut">Cut all</button><button id="mStab">Stabilise all</button><button id="mClear">Clear selection</button></div>
+    </fieldset>
+    <fieldset><legend>Look</legend>
+      <label>Effect <select id="mEffect"><option value="">—</option>${opts(S.effects, "")}</select></label>
+      <label>Transition into each <select id="mTrans"><option value="">—</option>${opts(S.transitions, "")}</select></label>
+      <label>Color <select id="mGrade"><option value="">—</option><option value="none">Same as the video</option>${opts(S.presets, "")}</select></label>
+    </fieldset>
+    <fieldset><legend>Title on each part</legend>
+      <label>Text <input id="mText" placeholder="e.g. Day 2"></label>
+      <div class="row"><select id="mStyle">${S.text_styles.map((s) => `<option value="${s}">${s.replace("_", " ")}</option>`).join("")}</select><button id="mAddText">Add</button><button id="mRmText">Remove titles</button></div>
+    </fieldset></div>`;
+  const firsts = many.map((i) => plan.parts[i].ids[0]).filter(Boolean);
+  $("#mCut").onclick = () => act([{ type: "cut", ids }]);
+  $("#mStab").onclick = () => act([{ type: "stabilise", ids, value: "on" }]);
+  $("#mClear").onclick = () => { selIds = new Set(); sel = -1; renderTimeline(); renderInspector(); };
+  $("#mEffect").onchange = (e) => e.target.value && act([{ type: "effect", ids, value: e.target.value }]);
+  $("#mTrans").onchange = (e) => e.target.value && act([{ type: "transition", ids: firsts, value: e.target.value }]);
+  $("#mGrade").onchange = (e) => e.target.value && act([{ type: "grade", ids, value: e.target.value }]);
+  $("#mAddText").onclick = () => $("#mText").value.trim() && act(firsts.map((id) => ({ type: "text", ids: [id], text: $("#mText").value, value: $("#mStyle").value, duration: 4 })));
+  $("#mRmText").onclick = () => act([{ type: "remove_text", ids }]);
+}
+function renderCutaway(box, oid) {
+  const w = item(oid), line = item(w.over);
+  box.innerHTML = `<div class="insp"><fieldset><legend>B-roll over the talking · ${oid}</legend>
+    <p class="small">${esc(w.reason || "Scenic B-roll")}</p>
+    <p class="small muted">Laid over “${esc((line?.text || "").slice(0, 80))}” (${w.over}), ${(w.offset ?? 1).toFixed(1)} s in. The talking keeps playing underneath. Drag it on the B-roll track to move it.</p>
+    <div class="row wrap"><button id="oInsert">Make it its own shot</button><button id="oCut">Remove</button></div>
+  </fieldset></div>`;
+  $("#oInsert").onclick = () => act([{ type: "broll_mode", ids: [oid], value: "insert" }]);
+  $("#oCut").onclick = () => { selIds = new Set(); act([{ type: "cut", ids: [oid] }]); };
+}
+
+// ---------------------------------------------------------------- graphics pane: templates and the video's graphics
+let templates = [];
+async function loadTemplates() {
+  const r = await api("/api/graphics/templates").catch(() => ({ templates: [] }));
+  templates = r.templates;
+  $("#gfxTemplates").innerHTML = templates.map((t, k) => `<button class="gfxcard" data-k="${k}"><b>${esc(t.name.replace(/_/g, " "))}</b><span>${esc(t.description || "")}</span></button>`).join("") ||
+    '<p class="muted small">Templates need the graphics module and a Chrome-based browser.</p>';
+}
+$("#gfxTemplates").onclick = (e) => {
+  const b = e.target.closest(".gfxcard");
+  if (!b) return;
+  const t = templates[+b.dataset.k], data = /speed|route|map/.test(t.name) || t.data;
+  $("#gfxForm").classList.remove("hidden");
+  $("#gfxForm").innerHTML = `<b>${esc(t.name.replace(/_/g, " "))}</b>
+    ${Object.entries(t.fields || {}).map(([k, f]) => `<label>${esc(f.label || k)} <input data-f="${esc(k)}" value="${esc(f.default ?? "")}"></label>`).join("")}
+    ${data ? `<label>GPS from clip <select id="gfxClip">${S.project.clips.map((c, i) => `<option value="${i}">${i + 1}. ${esc(c.name)}</option>`).join("")}</select></label>` : ""}
+    <label>Length (s) <input type="number" id="gfxDur" min="0.5" step="0.5" value="${t.duration || 4}"></label>
+    <div class="row"><button class="primary" id="gfxAdd">Add at the playhead (${fmtT(T)})</button><button id="gfxCancel">Cancel</button></div>`;
+  $("#gfxCancel").onclick = () => $("#gfxForm").classList.add("hidden");
+  $("#gfxAdd").onclick = async () => {
+    const fields = Object.fromEntries($$("#gfxForm [data-f]").map((i) => [i.dataset.f, i.value]));
+    try {
+      await afterEdit(await post("/api/graphics/add", { template: t.name, fields, at: +T.toFixed(2), duration: +$("#gfxDur").value, ...(data ? { clip: +$("#gfxClip").value } : {}) }));
+      $("#gfxForm").classList.add("hidden");
+      showAt(T + 0.05, false);
+    } catch (err) { fail(err); }
+  };
+};
+function renderGraphicsList() {
+  const rows = plan.parts.flatMap((p) => (p.graphics || []).filter((g) => !g.in).map((g) => ({ ...g, at: p.rec_start + g.t0 })));
+  $("#gfxList").innerHTML = rows.map((g) => `<li><span>✦ ${esc(g.template || g.page)} <span class="muted">${fmtT(g.at)} · ${(+g.full).toFixed(1)} s · ${esc(g.page)}</span></span>
+    <span><button data-gjump="${g.at}">Show</button> <button data-grm="${g.id}">✕</button></span></li>`).join("") || '<li class="muted">No graphics yet.</li>';
+}
+$("#gfxList").onclick = (e) => {
+  if (e.target.dataset.gjump) showAt(+e.target.dataset.gjump + 0.05, false);
+  if (e.target.dataset.grm) act([{ type: "remove_graphic", value: e.target.dataset.grm }]);
+};
+
 // ---------------------------------------------------------------- look & titles
 function renderLook() {
   const pr = S.project, g = pr.grade || {}, m = g.manual || {};
@@ -495,6 +977,7 @@ function renderLook() {
   $("#lutPath").value = m.lut || "";
   $("#introTitle").value = pr.intro?.title || ""; $("#introSub").value = pr.intro?.subtitle || "";
   $("#introStyle").value = pr.intro?.style || "bold";
+  $("#introOver").checked = !!pr.intro?.over;
   $("#outroTitle").value = pr.outro?.title || ""; $("#outroSub").value = pr.outro?.subtitle || "";
   $("#captions").checked = !!pr.captions; $("#privacy").checked = !!pr.privacy_blur;
   $("#brollShare").value = pr.broll_share ?? S.settings.broll_share; $("#musicVol").value = pr.music_volume ?? S.settings.music_volume;
@@ -508,20 +991,37 @@ $("#resetGrade").onclick = () => act([{ type: "grade", params: { exposure: 0, co
 $("#lutPath").onchange = (e) => act([{ type: "lut", value: e.target.value.trim() }]);
 $("#pickLut").onclick = async () => { if (!desktop()) return $("#lutPath").focus(); const f = await desktop().pick_lut(); if (f) act([{ type: "lut", value: f }]); };
 $("#saveCards").onclick = () => act([
-  { type: "intro", text: $("#introTitle").value, value: $("#introSub").value, style: $("#introStyle").value, duration: 4 },
-  { type: "outro", text: $("#outroTitle").value, value: $("#outroSub").value, style: $("#introStyle").value, duration: 4 }]);
+  { type: "intro", text: $("#introTitle").value, value: $("#introSub").value, style: $("#introStyle").value, duration: 4, over: $("#introOver").checked },
+  { type: "outro", text: $("#outroTitle").value, value: $("#outroSub").value, style: $("#introStyle").value, duration: 4, over: $("#introOver").checked }]);
 $("#captions").onchange = (e) => act([{ type: "captions", value: e.target.checked ? "on" : "off" }]);
 $("#privacy").onchange = (e) => act([{ type: "privacy_blur", value: e.target.checked ? "on" : "off" }]);
 $("#brollShare").onchange = (e) => act([{ type: "broll_share", amount: +e.target.value }]);
 $("#musicVol").onchange = (e) => act([{ type: "music_volume", amount: +e.target.value }]);
 
 // ---------------------------------------------------------------- assistant: chat & suggestions
+const agentName = (id) => agents.find((a) => a.id === id)?.label.replace(/ \(.*\)$/, "") || "";
 function renderChat() {
   const msgs = S.project.chat || [];
-  $("#chatLog").innerHTML = (msgs.length ? "" : '<p class="muted small">Tell me what to change, in your own words. Every change can be undone.</p>') +
-    msgs.map((m) => `<div class="msg ${m.role}">${esc(m.text)}${m.done?.length ? `<ul>${m.done.map((d) => `<li>${esc(d)}</li>`).join("")}</ul>` : ""}${m.errors?.length ? `<div class="errs">${m.errors.map(esc).join("<br>")}</div>` : ""}</div>`).join("");
+  $("#chatLog").innerHTML = (msgs.length ? "" : '<p class="muted small">Tell me what to change, in your own words. Every change can be undone. Pick “Agent with tools” or a coding agent above for bigger jobs, like animated graphics.</p>') +
+    msgs.map((m) => `<div class="msg ${m.role}">${m.role === "assistant" && m.agent ? `<span class="who">${esc(agentName(m.agent))}</span>` : ""}${esc(m.text)}${m.done?.length ? `<ul>${m.done.map((d) => `<li>${esc(d)}</li>`).join("")}</ul>` : ""}${m.steps?.length ? `<details><summary>${m.steps.filter((x) => x.kind === "tool").length} tool calls</summary><ul>${m.steps.map((x) => `<li>${x.kind === "tool" ? "🔧 " : x.kind === "say" ? "💬 " : "↳ "}${esc(x.text)}</li>`).join("")}</ul></details>` : ""}${m.errors?.length ? `<div class="errs">${m.errors.map(esc).join("<br>")}</div>` : ""}</div>`).join("");
   $("#chatLog").scrollTop = 1e9;
 }
+let agents = [], agentKind = "assistant";
+try { agentKind = localStorage.getItem("leancut.agent") || "assistant"; } catch { /* storage blocked */ }
+async function loadAgents() {
+  const r = await api("/api/agent/agents").catch(() => null);
+  if (!r) return;
+  agents = r.agents;
+  if (!agents.some((a) => a.id === agentKind)) agentKind = "assistant";
+  $("#agentPick").innerHTML = agents.map((a) => `<option value="${a.id}" ${a.ready ? "" : "disabled"}>${esc(a.label)}${a.ready ? "" : " · not installed"}</option>`).join("");
+  $("#agentPick").value = agentKind;
+  $("#agentList").innerHTML = agents.filter((a) => !["assistant", "local"].includes(a.id)).map((a) => `<li><b style="min-width:220px">${esc(a.label)}</b>${a.ready ? '<span class="ok">✓ found</span>' : '<span class="muted">not installed</span>'}</li>`).join("");
+  $("#mcpCmd").textContent = r.mcp_command.map((x) => (/\s/.test(x) ? `"${x}"` : x)).join(" ");
+  $("#connectList").innerHTML = Object.entries(r.connect || {}).map(([k, c]) => `<details><summary>Connect ${esc(k)}</summary><p class="small">${esc(c.how || "")}</p>${c.cli ? `<pre>${esc(c.cli)}</pre>` : ""}${c.snippet ? `<p class="small muted">${esc(c.path || "")}</p><pre>${esc(c.snippet)}</pre>` : ""}</details>`).join("");
+  renderChat();
+}
+$("#agentPick").onchange = (e) => { agentKind = e.target.value; try { localStorage.setItem("leancut.agent", agentKind); } catch { /* ignore */ } };
+$("#agentHelp").onclick = () => { showTab("settings"); $("#agentsPanel").scrollIntoView(); };
 $("#chips").onclick = (e) => { if (e.target.tagName === "BUTTON") { $("#chatInput").value = e.target.textContent; $("#chatInput").focus(); } };
 $("#chatInput").addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("#chatForm").requestSubmit(); } });
 $("#chatForm").onsubmit = async (e) => {
@@ -529,8 +1029,13 @@ $("#chatForm").onsubmit = async (e) => {
   const message = $("#chatInput").value.trim();
   if (!message) return;
   $("#chatInput").value = "";
-  $("#chatLog").insertAdjacentHTML("beforeend", `<div class="msg user">${esc(message)}</div><div class="msg assistant muted" id="thinking">Thinking…</div>`);
+  $("#chatLog").insertAdjacentHTML("beforeend", `<div class="msg user">${esc(message)}</div><div class="msg assistant muted working" id="thinking">${agentKind === "assistant" ? "Thinking…" : esc(agentName(agentKind)) + " is working…<div class=\"live\"></div>"}</div>`);
   $("#chatLog").scrollTop = 1e9;
+  if (agentKind !== "assistant") {  // a job: steps stream into the bubble, the chat reloads when it's done
+    try { logCount = 0; $("#log").innerHTML = ""; await post("/api/agent/run", { message, agent: agentKind }); wasRunning = true; poll(); }
+    catch (err) { $("#thinking")?.remove(); $("#chatLog").insertAdjacentHTML("beforeend", `<div class="msg assistant errs">${esc(err.message)}</div>`); }
+    return;
+  }
   $("#chatSend").disabled = true;
   try { await afterEdit(await post("/api/chat", { message })); }
   catch (err) { $("#thinking")?.remove(); $("#chatLog").insertAdjacentHTML("beforeend", `<div class="msg assistant errs">${esc(err.message)}</div>`); }
@@ -576,6 +1081,12 @@ const items = (c) => [
   ...(c.segments || []).map((x, i) => ({ ...x, kind: "segments", i })),
   ...(c.broll || []).map((x, i) => ({ ...x, kind: "broll", i })),
 ].sort((a, b) => a.start - b.start);
+// Whisper's word times when stored; older transcripts spread the words evenly over the line (close enough to cut)
+const wordsOf = (s) => {
+  if (s.words?.length) return s.words;
+  const ws = s.text.split(/\s+/).filter(Boolean), step = (s.end - s.start) / Math.max(1, ws.length);
+  return ws.map((w, k) => [w, +(s.start + k * step).toFixed(2), +(s.start + (k + 1) * step).toFixed(2)]);
+};
 function renderTranscript() {
   const tracks = [], text = [];
   S.project.clips.forEach((c, ci) => {
@@ -588,7 +1099,8 @@ function renderTranscript() {
     text.push(`<h3>${ci + 1}. ${esc(c.name)}</h3>`);
     all.forEach((s) => {
       const d = s.end - s.start;
-      const lbl = s.kind === "broll" ? `Scenic B-roll · ${d.toFixed(1)} s` : esc(s.text);
+      const lbl = s.kind === "broll" ? `Scenic B-roll · ${d.toFixed(1)} s${s.over ? " · over " + s.over : ""}`
+        : wordsOf(s).map((w) => `<span class="w" data-a="${w[1]}" data-b="${w[2]}">${esc(w[0])}</span>`).join(" ");
       const why = s.kind === "broll" ? s.reason : (s.score != null ? `★${s.score} ${s.reason || ""}` : "");
       const unsure = s.conf != null && s.conf < 0.55 ? ` <span class="unsure" title="The AI is only ${Math.round(s.conf * 100)}% sure">?</span>` : "";
       text.push(`<div class="seg ${s.keep ? "k" : ""} ${s.kind === "broll" ? "broll" : ""}" data-id="${c.id}" data-kind="${s.kind}" data-i="${s.i}">
@@ -617,9 +1129,33 @@ function peekSource(cid, t) {
   pv.readyState >= 1 ? go() : pv.addEventListener("loadedmetadata", go, { once: true });
   toast(`Source: ${c?.name} @ ${fmtT(t)} (press ▶ to return to the edit)`);
 }
+// Cut by editing words: select words in the transcript (drag across them) and press Delete or "Cut words".
+function wordSelection() {
+  const s = document.getSelection();
+  if (!s || s.isCollapsed || !$("#transcript").contains(s.anchorNode)) return null;
+  const rows = new Map();
+  $$("#transcript .seg").forEach((row) => row.querySelectorAll(".w").forEach((w) => {
+    if (s.containsNode(w, true)) (rows.get(row) || rows.set(row, []).get(row)).push(w);
+  }));
+  return rows.size ? rows : null;
+}
+async function cutWords() {
+  const rows = wordSelection();
+  if (!rows) return toast("Select some words in the transcript first.", true);
+  const actions = [];
+  for (const [row, ws] of rows) {
+    const ci = S.project.clips.findIndex((c) => c.id === row.dataset.id);
+    actions.push({ type: "cut_words", ids: [`c${ci}.s${row.dataset.i}`], start: +ws[0].dataset.a, end: +ws[ws.length - 1].dataset.b });
+  }
+  document.getSelection().removeAllRanges();
+  await act(actions);
+}
+$("#cutWordsBtn").onclick = cutWords;
+document.addEventListener("selectionchange", () => $("#cutWordsBtn").classList.toggle("hot", !!wordSelection()));
 $("#transcript").addEventListener("click", async (e) => {
   const row = e.target.closest(".seg");
-  if (!row) return;
+  if (!row || !document.getSelection().isCollapsed) return;
+  if (e.target.classList.contains("w")) return peekSource(row.dataset.id, +e.target.dataset.a);
   const { id, kind, i } = row.dataset;
   const it = S.project.clips.find((x) => x.id === id)[kind][+i];
   if (e.target.type === "checkbox") {
@@ -668,6 +1204,8 @@ $("#searchResults").onclick = (e) => {
 
 // ---------------------------------------------------------------- jobs & console
 function appendLog(line, isErr) {
+  const live = $("#thinking .live");
+  if (live) { live.textContent += line.replace(/^\[[\d:]+\]\s*/, "") + "\n"; live.scrollTop = 1e9; $("#chatLog").scrollTop = 1e9; }
   const log = $("#log"), el = document.createElement("div");
   el.textContent = line;
   if (isErr || line.includes("ERROR")) el.className = "err";
@@ -684,7 +1222,7 @@ function showResult(r) {
   if (r.preview) { previewUrl = r.preview; mode = "rendered"; syncMode(); pv.dataset.url = ""; showAt(0, false); toast("Preview rendered: every effect is baked in."); }
   if (r.search) { renderSearch(r.search); openPane("search"); }
   if (r.voice_test) { const a = $("#voiceAudio"); a.src = r.voice_test; a.classList.remove("hidden"); a.play().catch(() => {}); }
-  if (r.voice) loadState();
+  if (r.voice || r.agent) loadState();
   if (r.update) { $("#updateStatus").textContent = r.update.message; $("#restartUpdate").classList.toggle("hidden", !r.update.restart); }
 }
 async function poll() {
@@ -703,6 +1241,7 @@ async function poll() {
     if (wasRunning && !j.running) {
       if (!j.error) showResult(j.result);
       else if (j.error !== "Cancelled") { appendLog("ERROR: " + j.error, true); }
+      if (j.error && $("#thinking .live")) await loadState();  // the agent's failure is in the chat
       if (["AI edit", "Sync cameras"].includes(j.name) || j.name.startsWith("Batch") || j.name.startsWith("Create voice")) await loadState();
       if (!$("#settings").classList.contains("hidden")) loadSetup();
     }
@@ -776,6 +1315,8 @@ $("#restartUpdate").onclick = () => post("/api/update/restart").then(() => toast
 
 loadState().then(() => {
   refreshModels();
+  loadAgents();
+  loadTemplates();
   if (S.settings.update_check) checkUpdate(false);
   // deep links: #settings, #projects, #part=3, #pane=sugg (combine with &)
   for (const kv of location.hash.slice(1).split("&")) {

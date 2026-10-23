@@ -161,6 +161,7 @@ def test_install_stages_next_to_the_app(tmp_path, monkeypatch, platform):
     assert (bundle / ("LeanCut.exe" if platform == "win32" else "LeanCut")).read_text() == "old"  # untouched
     script = stage / ("update.ps1" if platform == "win32" else "update.sh")
     assert str(script) in updates._helper and str(os.getpid()) in script.read_text(encoding="utf-8")
+    assert script.read_bytes().startswith(b"\xef\xbb\xbf") == (platform == "win32")  # PowerShell 5.1 needs the BOM
 
 
 def test_install_rejects_archive_without_the_app(tmp_path, monkeypatch):
@@ -270,3 +271,18 @@ def test_sh_helper_rolls_back_when_the_new_copy_is_missing(tmp_path):
             break
         time.sleep(0.1)
     assert (tmp_path / "launched").read_text().strip() == "old" and (app / "LeanCut").exists()
+
+
+def test_install_into_an_explicit_bundle(tmp_path, monkeypatch):
+    """tools/update_e2e.py points install() at a real installed copy instead of the running (unfrozen) app."""
+    bundle, archive = fake_install(tmp_path, monkeypatch, "linux")
+    monkeypatch.setattr(updates, "current_bundle", lambda: None)
+    assert updates.install(archive, on_log=lambda m: None, bundle=bundle)["restart"] is True
+    assert (bundle.parent / updates.STAGE / "LeanCut" / "LeanCut").read_text() == "new"
+
+
+def test_release_workflow_publishes_every_update_asset():
+    """The updater looks for these names on the release: the release workflow must upload all of them."""
+    wf = (Path(__file__).resolve().parent.parent / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+    for name in updates.ASSETS.values():
+        assert f"dist/{name}" in wf, name

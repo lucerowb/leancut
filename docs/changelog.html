@@ -39,6 +39,7 @@
   <aside class="toc" aria-label="Releases">
     <p>Releases</p>
     <ol>
+      <li><a href="#v0.4.0">v0.4.0</a></li>
       <li><a href="#v0.3.0">v0.3.0</a></li>
       <li><a href="#v0.2.0">v0.2.0</a></li>
       <li><a href="#v0.1.0">v0.1.0</a></li>
@@ -49,6 +50,36 @@
     <h1>Changelog</h1>
     <p class="lede">What changed in each release. Downloads for every version are on the <a href="https://github.com/lucerowb/leancut/releases">GitHub releases page</a>.</p>
     <p><a class="btn primary" href="https://github.com/lucerowb/leancut/releases/latest">Download the latest release</a></p>
+
+    <section class="release" id="v0.4.0">
+      <h2>v0.4.0 <time datetime="2026-10-23">23 October 2026</time></h2>
+      <p>Agents that edit with you, animated graphics, a proper timeline, B-roll that follows the story, and text you place right on the video.</p>
+      <h3>Highlights</h3>
+      <ul>
+        <li><b>Agents edit with you.</b> Pick who edits in the assistant panel: the quick assistant, an <b>agent with tools</b> that runs on your own local model (Ollama or LM Studio, e.g. <code>qwen2.5:14b</code>), or a coding agent such as <b>Codex</b> or <b>Claude Code</b>. Agents read the edit, change it with LeanCut's validated actions (so every change can be undone), write animated graphics, and <b>look</b> at frames of the finished video, rendered exactly as the export will be, to check their work. A text-only local model gets its eyes from your vision model (e.g. <code>gemma3:4b</code>).</li>
+        <li><b>Connect any coding agent over MCP.</b> LeanCut runs an MCP server (<code>LeanCut --mcp</code>) with the same tools; Settings › Agents shows the line to paste for Claude Code, Codex, Cursor, OpenCode, Gemini CLI and Qwen Code, and <code>leancut connect … --write</code> sets it up for you. There's also a CLI (<code>leancut look 12.5</code>, <code>leancut call get_edit</code>). See CONNECT_AGENTS.md.</li>
+        <li><b>Animated graphics, inspired by OpenFilm.</b> A graphic is a web page that draws any moment <code>t</code> (the same page format as <a href="https://github.com/openfilm/openfilm">OpenFilm</a>, so pages work in both), laid over your footage on a new Graphics track and rendered frame-accurately with headless Chrome. Ten templates come with it: title, lower third, chapter, location pin, end screen, quote, time jump, stat card, and a <b>speedometer</b> and <b>route map</b> drawn from a GoPro's GPS. Agents can write new ones and check them: page errors, missing fonts, text off the frame, and whether the same <code>t</code> always draws the same picture. Graphics play live on the monitor and run on across cuts.</li>
+        <li><b>A timeline that works like an editor's.</b> Filmstrip thumbnails on the video track and a waveform on the audio track. Drag a part's edge to trim it (it snaps between words), drag the ruler to scrub, press S to split at the playhead, ⇧-click or ⌘-click to select several parts and change them all at once. ⌘-scroll or pinch zooms around the pointer; wheel scrolls. Tracks: B-roll, Video, Audio, Titles, Voice-over.</li>
+        <li><b>B-roll knows the order.</b> Clips are added in the order they were recorded (from the time in the file name, or the camera's creation time), and <b>Sort by time recorded</b> fixes an existing project. Scenic B-roll is only used near the talking it belongs to: a shot more than about a minute from anything you say shows another place and time, so it's left out instead of being dropped in at random.</li>
+        <li><b>B-roll over the talking.</b> By default B-roll is now laid <i>over</i> the nearest line from the same scene (a cutaway): the picture changes and your voice keeps going, the way an editor would cut it. Drag it on the B-roll track to move it, or make it a shot of its own. Settings › Rider AI › B-roll placement chooses the default.</li>
+        <li><b>Text right on the video.</b> Press <b>T+ Text</b> (or T) to add text at the playhead, drag it anywhere on the monitor, scroll over it to resize, double-click to type. Double-click a burned-in caption to correct it. Intro and outro titles can sit over the first and last shots instead of a separate card.</li>
+        <li><b>Cut by editing words.</b> In the Transcript tab, select words and press Delete: just those words are cut, with a clean jump cut and no padding that would bring them back.</li>
+        <li><b>Effects, transitions and titles in the edit lists.</b> EDL, FCPXML and OpenTimelineIO now carry dissolves, speed changes, titles, intro and outro cards and B-roll cutaways, not only the cuts.</li>
+      </ul>
+      <h3>Also new</h3>
+      <ul>
+        <li><b>GoPro telemetry checked against real files.</b> The parser now matches GoPro's own reference parser exactly on HERO5 to HERO13 files. HERO11 and newer (GPS9) now have GPS at all, timing comes from the real packet times (no drift), Karma and HERO6+BLE timing is fixed, and poor GPS fixes are dropped.</li>
+        <li><b>In-app updates tested end to end</b> by a new CI workflow on Windows, Linux and macOS (download, install, swap, relaunch). Two Windows fixes: a non-ASCII install folder, or <code>[ ]</code> in its name, no longer breaks an update.</li>
+        <li><b>Nepali and Hindi transcription notes.</b> Tested on real Nepali footage: stock Whisper set to English invents much of what it writes, while a Nepali fine-tune (<code>Dragneel/whisper-medium-nepali-openslr-ct2</code>) writes real Nepali. The guide lists tested Nepali and Hindi models and <code>tools/convert_whisper.py</code> converts others. Devanagari now splits into words and sentences (।) correctly, so retakes and spoken markers work in Nepali and Hindi.</li>
+        <li><b>GPU for the vision models.</b> Face and plate blur, footage search and voice enhancement use the GPU where it helps: DirectML on Windows (any DirectX 12 GPU), CUDA on Linux from source (<code>onnxruntime-gpu</code>), and CoreML for the plate detector on Macs, where it was measured faster with identical detections. Any GPU failure falls back to the CPU.</li>
+        <li><b>Ready for signed builds.</b> SIGNING.md walks through Apple Developer ID notarization and Azure Artifact Signing for Windows; the release workflow uses them when the secrets exist, and every release now has a <code>SHA256SUMS.txt</code>.</li>
+      </ul>
+      <h3>Fixed</h3>
+      <ul>
+        <li><b>Pause didn't always pause.</b> Pressing pause while the preview was switching to another clip let playback start again, and Space could toggle twice when the play button had focus. Both are fixed.</li>
+        <li>Two neighbouring parts with different looks could both play the same 0.3 s of footage at the join.</li>
+      </ul>
+    </section>
 
     <section class="release" id="v0.3.0">
       <h2>v0.3.0 <time datetime="2026-10-23">23 October 2026</time></h2>

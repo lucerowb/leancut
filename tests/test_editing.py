@@ -141,3 +141,73 @@ def test_api_actions_plan_undo_redo():
     r = c.post("/api/redo").json()
     assert r["project"]["intro"]["title"] == "Day 1"
     assert c.post("/api/chat", json={"message": ""}).status_code == 400
+
+
+def test_split_and_word_cuts_stay_cut():
+    p = project()
+    seg = p["clips"][0]["segments"][1]
+    seg["words"] = [["We", 4.2, 4.5], ["ride", 4.6, 5.0], ["um", 5.2, 5.6], ["today.", 6.0, 8.0]]
+    seg["texts"] = [{"text": "Late", "style": "label", "offset": 3.0, "duration": 2}]
+    done, errors = editing.apply_actions(p, [{"type": "cut_words", "ids": ["c0.s1"], "start": 5.2, "end": 5.6}])
+    assert not errors, errors
+    a, b = p["clips"][0]["segments"][1], p["clips"][0]["segments"][-1]
+    assert (a["text"], a["end"], a["cut_out"]) == ("We ride", 5.2, True)
+    assert (b["text"], b["start"], b["cut_in"]) == ("today.", 5.6, True)
+    assert b["texts"][0]["offset"] == round(4.2 + 3.0 - 5.6, 2) and not a["texts"]  # the title moved with its words
+    parts = editing.build_parts(p, {})
+    ranges = [(x["start"], x["end"]) for x in parts if x["clip"]["id"] == "a"][:2]
+    assert ranges[0][1] == 5.2 and ranges[1][0] == 5.6  # no padding re-includes "um"
+    # split: no lost or doubled frames at the split point
+    editing.apply_actions(p, [{"type": "split", "ids": ["c1.s0"], "start": 4.0}])
+    parts = [x for x in editing.build_parts(p, {}) if x["clip"]["id"] == "b"]
+    assert [(x["start"], x["end"]) for x in parts] == [(1.85, 4.0), (4.0, 6.15)]
+    assert editing.apply_actions(p, [{"type": "split", "ids": ["c1.s0"], "start": 3.9}])[1]  # too close to the edge
+
+
+def test_broll_stays_in_its_scene_and_cuts_away():
+    p = project()
+    p["clips"][0]["broll"] = [{"start": 9, "end": 13, "keep": True, "interest": 0.8},
+                              {"start": 55, "end": 59, "keep": True, "interest": 0.9}]
+    p["clips"][0]["duration"] = 300
+    p["clips"][0]["broll"].append({"start": 200, "end": 204, "keep": True, "interest": 0.9})  # far from any talking
+    over, dropped = editing.place_broll(p, "auto", scene=60)
+    b = p["clips"][0]["broll"]
+    assert dropped == 1 and not b[2]["keep"]
+    assert "over" not in b[0] and "over" not in b[1] and b[1]["keep"]  # 4 s of B-roll needs a line >= 5.5 s
+    p["clips"][0]["segments"][1]["end"] = 15  # a long line now
+    editing.place_broll(p, "auto", scene=60)
+    assert b[0]["over"] == "c0.s1" and "over" not in b[1]  # one cutaway per line; the other stays a shot
+    parts = editing.build_parts(p, {})
+    host = next(x for x in parts if "c0.s1" in x["ids"])
+    assert host["overlays"] and host["overlays"][0]["id"] == "c0.b0" and not any("c0.b0" in x["ids"] for x in parts)
+    assert host["overlays"][0]["at"] == 4.2 + 1.0
+    # the creator's own B-roll is never dropped, even far away
+    p["clips"][0]["broll"][2].update(keep=True, reason="you said a marker phrase")
+    assert editing.place_broll(p, "insert", scene=60)[1] == 0 and b[2]["keep"] and not b[0].get("over")
+
+
+def test_intro_over_video_and_placed_text_render():
+    p = project()
+    editing.apply_actions(p, [{"type": "intro", "text": "Day 1", "value": "Pokhara", "over": True},
+                              {"type": "text", "ids": ["c0.s0"], "text": "Here", "value": "plain", "x": 0.3, "y": 0.8, "size": 0.08}])
+    assert p["intro"]["over"] is True
+    t = p["clips"][0]["segments"][0]["texts"][0]
+    assert (t["x"], t["y"], t["size"]) == (0.3, 0.8, 0.08)
+    editing.apply_actions(p, [{"type": "edit_text", "ids": ["c0.s0"], "index": 0, "x": 0.5, "text": "There"}])
+    assert (t["x"], t["text"]) == (0.5, "There")
+    f = editing.text_filter("texts/a.txt", "fonts/f.ttf", "plain", 0, 2, 1280, 720, 0.5, 0.8, 0.08)
+    assert "x=w*0.5000-text_w/2:y=h*0.8000-text_h/2" in f and "fontsize=57" in f
+
+
+def test_cutaway_render(tmp_path):
+    """A B-roll cutaway over a talking part renders in one FFmpeg pass, keeping the part's length and sound."""
+    src = tmp_path / "talk.mp4"
+    ve._ffmpeg(["-y", "-f", "lavfi", "-i", "testsrc=s=320x180:d=6:r=25", "-f", "lavfi", "-i", "sine=f=440:d=6",
+                "-shortest", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", str(src)])
+    fmt = {"width": 320, "height": 180, "fps": 25}
+    vf = production.base_vf(fmt) + ",fps=25,format=yuv420p"
+    spec = {"src": str(src), "start": 0.5, "end": 4.5, "vf": production.base_vf(fmt), "top": "fps=25,format=yuv420p",
+            "af": "", "overlays": [{"src": str(src), "start": 5.0, "end": 6.0, "at": 1.0, "vf": vf}]}
+    out, starts = ve.render_parts([spec], tmp_path / "out.mp4", fmt, "software", tmp_path / "parts", str(tmp_path))
+    info = ve.probe(out)
+    assert abs(info["duration"] - 4.0) < 0.15 and info["has_audio"]

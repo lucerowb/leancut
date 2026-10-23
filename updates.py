@@ -108,9 +108,10 @@ def current_bundle() -> Path | None:
     return exe.parent
 
 
-def install(downloaded, on_log=print) -> dict:
-    """Stage the downloaded release next to the running app. Nothing is replaced until restart()."""
-    bundle = current_bundle()
+def install(downloaded, on_log=print, bundle: Path | None = None) -> dict:
+    """Stage the downloaded release next to the running app (or next to `bundle`, which only the end-to-end test
+    tools/update_e2e.py passes). Nothing is replaced until restart()."""
+    bundle = Path(bundle) if bundle else current_bundle()
     if bundle is None:
         return {"restart": False, "message": "You're running LeanCut from source: update with `git pull`."}
     if (bundle / "settings.json").exists():  # never swap away a folder that holds user data
@@ -128,7 +129,9 @@ def install(downloaded, on_log=print) -> dict:
             raise RuntimeError(f"the download doesn't contain {new.name}/{_exe_path()}")
         script = stage / ("update.ps1" if sys.platform == "win32" else "update.sh")
         old = bundle.with_name(f".{bundle.name}.old")
-        script.write_text(helper_script(sys.platform, bundle, new, old, os.getpid(), stage), encoding="utf-8")
+        # Windows PowerShell 5.1 reads a .ps1 without a BOM as ANSI, which garbles non-ASCII folder names
+        script.write_text(helper_script(sys.platform, bundle, new, old, os.getpid(), stage),
+                          encoding="utf-8-sig" if sys.platform == "win32" else "utf-8")
     except Exception:
         shutil.rmtree(stage, ignore_errors=True)
         raise
@@ -191,15 +194,17 @@ def helper_script(platform: str, bundle: Path, new: Path, old: Path, pid: int, s
         q = lambda p: "'" + str(p).replace("'", "''") + "'"
         return f"""# LeanCut updater (written by updates.py; deletes itself)
 $app = {q(bundle)}; $new = {q(new)}; $old = {q(old)}; $stage = {q(stage)}
+$exe = Join-Path $app 'LeanCut.exe'
 Wait-Process -Id {int(pid)} -ErrorAction SilentlyContinue
-if (Test-Path $old) {{ Remove-Item $old -Recurse -Force }}
+# -LiteralPath and Process.Start: -Path and Start-Process read [ ] in folder names as wildcards
+if (Test-Path -LiteralPath $old) {{ Remove-Item -LiteralPath $old -Recurse -Force }}
 # Windows (and antivirus) can hold files for a moment after the app exits: retry the rename.
-for ($i = 0; $i -lt 30 -and (Test-Path $app); $i++) {{ try {{ Move-Item $app $old -ErrorAction Stop }} catch {{ Start-Sleep 1 }} }}
-if (Test-Path $app) {{ Start-Process (Join-Path $app 'LeanCut.exe'); exit 1 }}
-try {{ Move-Item $new $app -ErrorAction Stop; Start-Process (Join-Path $app 'LeanCut.exe') -ErrorAction Stop }}
-catch {{ if (Test-Path $app) {{ Remove-Item $app -Recurse -Force }}; Move-Item $old $app; Start-Process (Join-Path $app 'LeanCut.exe'); exit 1 }}
-Remove-Item $old -Recurse -Force -ErrorAction SilentlyContinue
-Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
+for ($i = 0; $i -lt 30 -and (Test-Path -LiteralPath $app); $i++) {{ try {{ Move-Item -LiteralPath $app $old -ErrorAction Stop }} catch {{ Start-Sleep 1 }} }}
+if (Test-Path -LiteralPath $app) {{ [void][Diagnostics.Process]::Start($exe); exit 1 }}
+try {{ Move-Item -LiteralPath $new $app -ErrorAction Stop; [void][Diagnostics.Process]::Start($exe) }}
+catch {{ if (Test-Path -LiteralPath $app) {{ Remove-Item -LiteralPath $app -Recurse -Force }}; Move-Item -LiteralPath $old $app; [void][Diagnostics.Process]::Start($exe); exit 1 }}
+Remove-Item -LiteralPath $old -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue
 """
     q = shlex.quote
     # shortcut: "launched" means open/exec started it, not that it stayed up; add a health check if bad builds ship

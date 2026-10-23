@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1920, height=1080">
+<title>Time jump</title>
+<script type="application/json" id="leancut-template">
+{"name": "Time jump", "description": "A clock whose hands sweep from one time to another while the digits count, with a caption such as \"2 hours later\".", "duration": 4,
+ "fields": {"label": {"label": "Caption", "default": "2 hours later"},
+            "from": {"label": "From (HH:MM)", "default": "10:30"},
+            "to": {"label": "To (HH:MM)", "default": "12:30"}}}
+</script>
+<style>
+  html { font-size: calc(100vw / 192); }
+  html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; }
+  body {
+    --accent: #ff6a3d;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", "Nirmala UI", sans-serif;
+    color: #fff; -webkit-font-smoothing: antialiased;
+    display: flex; align-items: center; justify-content: center;
+  }
+  #shade { position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 50%, rgba(6, 8, 12, 0.5), rgba(6, 8, 12, 0) 65%); }
+  #wrap { position: relative; display: flex; flex-direction: column; align-items: center; }
+  #clock { width: 30rem; height: 30rem; filter: drop-shadow(0 0.8rem 2.4rem rgba(0, 0, 0, 0.35)); }
+  #digits { margin-top: 3rem; font-size: 4.4rem; font-weight: 600; letter-spacing: 0.08em; font-variant-numeric: tabular-nums; color: var(--accent); }
+  #label { margin-top: 1.2rem; font-size: 9rem; font-weight: 800; letter-spacing: -0.02em; line-height: 1.05; text-align: center; max-width: 160rem; text-shadow: 0 0.4rem 3rem rgba(0, 0, 0, 0.4); }
+</style>
+</head>
+<body data-duration="{{duration}}">
+<div id="shade"></div>
+<div id="wrap" data-from="{{from}}" data-to="{{to}}">
+  <svg id="clock" viewBox="-100 -100 200 200" aria-hidden="true">
+    <circle r="94" fill="rgba(10,12,16,0.55)" stroke="#fff" stroke-width="5"/>
+    <g id="ticks"></g>
+    <line id="hour" x1="0" y1="10" x2="0" y2="-48" stroke="#fff" stroke-width="8" stroke-linecap="round"/>
+    <line id="minute" x1="0" y1="14" x2="0" y2="-74" stroke="#ff6a3d" stroke-width="5" stroke-linecap="round"/>
+    <circle r="7" fill="#fff"/>
+  </svg>
+  <div id="digits"></div>
+  <div id="label">{{label}}</div>
+</div>
+<script>
+const D = Number(document.body.dataset.duration) || 4;
+const clamp = (x) => Math.min(1, Math.max(0, x));
+const span = (t, a, b) => clamp((t - a) / (b - a));
+const outExpo = (x) => (x >= 1 ? 1 : 1 - Math.pow(2, -10 * x));
+const inCubic = (x) => x * x * x;
+const inOutCubic = (x) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2);
+const $ = (id) => document.getElementById(id);
+const wrap = $('wrap'), shade = $('shade'), clock = $('clock'), hour = $('hour'), minute = $('minute');
+const digits = $('digits'), label = $('label');
+
+const ticks = $('ticks');
+for (let i = 0; i < 60; i++) {
+  const a = (i / 60) * 2 * Math.PI, major = i % 5 === 0, r0 = major ? 76 : 83;
+  const l = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+  l.setAttribute('x1', Math.sin(a) * r0); l.setAttribute('y1', -Math.cos(a) * r0);
+  l.setAttribute('x2', Math.sin(a) * 88); l.setAttribute('y2', -Math.cos(a) * 88);
+  l.setAttribute('stroke', major ? '#fff' : 'rgba(255,255,255,0.45)');
+  l.setAttribute('stroke-width', major ? 4 : 2);
+  ticks.appendChild(l);
+}
+
+const minutes = (s, fallback) => {
+  const m = String(s).trim().match(/^(\d{1,2})[:.](\d{2})$/);
+  return m && Number(m[1]) < 24 && Number(m[2]) < 60 ? Number(m[1]) * 60 + Number(m[2]) : fallback;
+};
+const from = minutes(wrap.dataset.from, 630);
+let to = minutes(wrap.dataset.to, from + 120);
+if (to <= from) to += 24 * 60; // past midnight
+const pad = (n) => String(n).padStart(2, '0');
+const hhmm = (m) => `${pad(Math.floor(m / 60) % 24)}:${pad(Math.floor(m % 60))}`;
+
+window.film = {
+  duration: D,
+  frame(t) {
+    shade.style.opacity = outExpo(span(t, 0, 0.6));
+    const c = outExpo(span(t, 0, 0.7));
+    clock.style.opacity = c;
+    clock.style.transform = `scale(${0.85 + 0.15 * c})`;
+    const p = inOutCubic(span(t, 0.5, Math.max(1, D - 1.2)));
+    const now = from + (to - from) * p;
+    minute.setAttribute('transform', `rotate(${(now % 60) * 6})`);
+    hour.setAttribute('transform', `rotate(${(now / 60) * 30})`);
+    digits.textContent = hhmm(now);
+    digits.style.opacity = outExpo(span(t, 0.3, 0.9));
+    const l = outExpo(span(t, 0.4, 1.2));
+    label.style.opacity = l;
+    label.style.transform = `translateY(${(1 - l) * 2.5}rem)`;
+    const out = inCubic(span(t, D - 0.6, D));
+    wrap.style.opacity = 1 - out;
+    wrap.style.transform = `scale(${1 - out * 0.06})`;
+    if (out > 0) shade.style.opacity = 1 - out;
+  },
+};
+
+if (!window.filmHost) {
+  const t0 = performance.now();
+  const loop = () => { window.film.frame(((performance.now() - t0) / 1000) % D); requestAnimationFrame(loop); };
+  requestAnimationFrame(loop);
+}
+</script>
+</body>
+</html>

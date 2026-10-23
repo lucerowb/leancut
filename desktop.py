@@ -2,10 +2,20 @@
 (WebKit on macOS, WebView2 on Windows). This is also the PyInstaller entry point.
 
 Run from source:  python desktop.py
+With --mcp it is LeanCut's MCP server for coding agents, with --cli ... the leancut CLI (no window, no server).
 """
+import sys
+
+if __name__ == "__main__" and sys.argv[1:2] in (["--mcp"], ["--cli"]):
+    # before webview/app are imported: the packaged binary doubles as the MCP server and CLI, starting in a blink
+    if sys.argv[1] == "--mcp":
+        import mcp_server
+        sys.exit(mcp_server.main())
+    import leancut_cli
+    sys.exit(leancut_cli.main(sys.argv[2:]))
+
 import os
 import socket
-import sys
 import threading
 import time
 
@@ -56,6 +66,7 @@ def main():
     threading.Thread(target=server.run, daemon=True).start()
     while not server.started:
         time.sleep(0.05)
+    app.announce(f"http://127.0.0.1:{port}")  # coding agents' MCP server finds this LeanCut through server.json
     webview.create_window(app.APP_NAME, f"http://127.0.0.1:{port}/", js_api=Api(),
                           width=1440, height=920, min_size=(900, 640), background_color="#0f1115")
     if sys.platform.startswith("linux"):

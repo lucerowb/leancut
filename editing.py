@@ -26,7 +26,7 @@ TRANSITIONS = {
     "slide_right": "slideright", "circle": "circleopen", "radial": "radial", "zoom": "zoomin",
     "pixelize": "pixelize", "smooth": "smoothleft",
 }
-TEXT_STYLES = ("title", "lower_third", "caption", "label")
+TEXT_STYLES = ("title", "lower_third", "caption", "label", "plain")
 INTRO_STYLES = ("bold", "minimal", "cinematic")
 NEUTRAL = {"exposure": 0.0, "contrast": 1.0, "saturation": 1.0, "gamma": 1.0, "temperature": 0.0, "vignette": 0.0,
            "teal_orange": 0.0, "curves": None, "lut": None}
@@ -55,8 +55,8 @@ def items(project):
     for ci, c in enumerate(project["clips"]):
         if c.get("angle_of"):
             continue
-        for kind in ("segments", "broll"):
-            for i, it in enumerate(c.get(kind) or []):
+        for kind in ("segments", "broll"):  # source order (split pieces are appended, so ids aren't sorted)
+            for i, it in sorted(enumerate(c.get(kind) or []), key=lambda x: x[1]["start"]):
                 yield item_id(ci, kind, i), c, kind, i, it
 
 
@@ -78,12 +78,22 @@ def look(project, it):
 
 # ---------------------------------------------------------------- parts
 
-def build_parts(project, settings, pad=0.15, max_gap=0.6):
-    """Kept items -> ordered render parts: [{clip, start, end, speed, effect, grade, transition, texts, voiceovers, ids}].
+def cutaway_target(project, it):
+    """The kept line a B-roll window is laid over (a cutaway: picture changes, the talking continues), or None."""
+    hit = find(project, it.get("over")) if it.get("over") else None
+    return hit if hit and hit[1] == "segments" and hit[3].get("keep") and not hit[0].get("angle_of") else None
 
-    Adjacent kept items of a clip merge into one part (as before) unless their look differs or the later one has its
-    own transition. Texts/voice-overs anchored to an item keep their source time, so they move with trims."""
-    parts = []
+
+def build_parts(project, settings, pad=0.15, max_gap=0.6):
+    """Kept items -> ordered render parts: [{clip, start, end, speed, effect, grade, transition, texts, voiceovers,
+    overlays, ids}].
+
+    Clips play in project order and each clip in source order, so the story stays chronological. Adjacent kept items
+    of a clip merge into one part unless their look differs, the later one has its own transition, or they were
+    separated by a split / word cut (`cut_in` / `cut_out`: a hard edge with no padding, so cut words stay cut).
+    Cutaway B-roll (`over` = a kept line's id) isn't a part of its own: it rides on the part holding that line.
+    Texts/voice-overs anchored to an item keep their source time, so they move with trims."""
+    parts, cutaways = [], []
     for c in project["clips"]:
         if c.get("angle_of"):
             continue
@@ -91,29 +101,50 @@ def build_parts(project, settings, pad=0.15, max_gap=0.6):
         kept = []
         for kind in ("segments", "broll"):
             for i, it in enumerate(c.get(kind) or []):
-                if it.get("keep"):
+                if not it.get("keep"):
+                    continue
+                if kind == "broll" and cutaway_target(project, it):
+                    cutaways.append((item_id(ci, kind, i), c, it))
+                else:
                     kept.append((item_id(ci, kind, i), it))
         kept.sort(key=lambda x: x[1]["start"])
         cur = None
         for iid, it in kept:
-            a, b = max(0.0, it["start"] - pad), min(c["duration"], it["end"] + pad)
+            a = it["start"] if it.get("cut_in") else max(0.0, it["start"] - pad)
+            b = it["end"] if it.get("cut_out") else min(c["duration"], it["end"] + pad)
             tr = it.get("transition")
-            if (cur and a - cur["end"] <= max_gap and cur["look"] == look(project, it) and not tr):
+            if (cur and a - cur["end"] <= max_gap and cur["look"] == look(project, it) and not tr
+                    and not it.get("cut_in") and not cur["hard_end"]):
                 cur["end"] = max(cur["end"], b)
                 cur["ids"].append(iid)
             else:
+                if cur and cur["end"] > a:  # padding must never replay frames the previous part already showed
+                    cur["end"] = max(cur["start"] + 0.05, a)
                 cur = {"clip": c, "start": a, "end": b, "speed": 1.0, "effect": it.get("effect", "none"),
                        "grade": it.get("grade") or {}, "transition": tr, "ids": [iid], "look": look(project, it),
-                       "texts": [], "voiceovers": []}
+                       "texts": [], "voiceovers": [], "overlays": [], "graphics": []}
                 parts.append(cur)
-            for t in it.get("texts") or []:
-                cur["texts"].append({**t, "at": it["start"] + float(t.get("offset", 0))})
+            cur["hard_end"] = bool(it.get("cut_out"))
+            for k, t in enumerate(it.get("texts") or []):
+                cur["texts"].append({**t, "at": it["start"] + float(t.get("offset", 0)), "item": iid, "index": k})
             for v in it.get("voiceovers") or []:
                 cur["voiceovers"].append({**v, "at": it["start"] + float(v.get("offset", 0))})
+            for g in it.get("graphics") or []:
+                cur["graphics"].append({**g, "at": it["start"] + float(g.get("offset", 0)), "item": iid})
         for p in parts:
             if p["clip"] is c:
                 p["start"], p["end"] = round(p["start"], 3), round(p["end"], 3)
                 p["speed"] = {"slowmo": 0.5, "speedup": 2.0}.get(p["effect"], 1.0)
+    for iid, c, it in cutaways:
+        line = cutaway_target(project, it)[3]
+        p = next((p for p in parts if it["over"] in p["ids"]), None)
+        if not p:
+            continue
+        at = max(p["start"], line["start"] + float(it.get("offset", 0.5)))
+        dur = min(it["end"] - it["start"], p["end"] - at)
+        if dur >= 0.5:
+            p["overlays"].append({"id": iid, "clip": c, "start": it["start"], "end": round(it["start"] + dur, 3),
+                                  "at": round(at, 3)})
     return parts
 
 
@@ -222,18 +253,27 @@ def wrap(text, width=40):
     return "\n".join(lines + ([cur] if cur else []))
 
 
-def text_filter(textfile, fontfile, style, t0, t1, w, h):
+TEXT_SIZES = {"title": 1 / 10, "lower_third": 1 / 20, "caption": 1 / 22, "label": 1 / 30, "plain": 1 / 14}
+
+
+def text_filter(textfile, fontfile, style, t0, t1, w, h, x=None, y=None, size=None):
     """drawtext for one overlay. textfile/fontfile are paths relative to the render's working folder (no escaping
-    trouble with Windows drive letters or quotes). Fades in and out over 0.3 s."""
+    trouble with Windows drive letters or quotes). Fades in and out over 0.3 s. x/y (0..1, the text's centre) and
+    size (fraction of the frame height) override the style's placement, for text placed on the monitor."""
     fade = (f"if(lt(t,{t0:.3f}+0.3),(t-{t0:.3f})/0.3,if(gt(t,{t1:.3f}-0.3),({t1:.3f}-t)/0.3,1))")
     common = (f"drawtext=fontfile={fontfile}:textfile={textfile}:fontcolor=white:line_spacing=8"
               f":enable='between(t,{t0:.3f},{t1:.3f})':alpha='{fade}'")
-    size = {"title": h / 10, "lower_third": h / 20, "caption": h / 22, "label": h / 30}.get(style, h / 22)
-    pos = {"title": "x=(w-text_w)/2:y=(h-text_h)/2:borderw=4:bordercolor=black@0.55",
-           "lower_third": f"x=w*0.06:y=h*0.74-text_h:box=1:boxcolor=black@0.55:boxborderw={int(h / 60)}",
-           "caption": f"x=(w-text_w)/2:y=h*0.92-text_h:box=1:boxcolor=black@0.5:boxborderw={int(h / 90)}",
-           "label": f"x=w*0.04:y=h*0.05:box=1:boxcolor=black@0.4:boxborderw={int(h / 120)}"}[style]
-    return f"{common}:fontsize={int(size)}:{pos}"
+    px = h * (size or TEXT_SIZES.get(style, 1 / 22))
+    look = {"title": "borderw=4:bordercolor=black@0.55",
+            "lower_third": f"box=1:boxcolor=black@0.55:boxborderw={int(h / 60)}",
+            "caption": f"box=1:boxcolor=black@0.5:boxborderw={int(h / 90)}",
+            "label": f"box=1:boxcolor=black@0.4:boxborderw={int(h / 120)}"}.get(style, "borderw=3:bordercolor=black@0.6")
+    if x is not None and y is not None:
+        pos = f"x=w*{float(x):.4f}-text_w/2:y=h*{float(y):.4f}-text_h/2"
+    else:
+        pos = {"title": "x=(w-text_w)/2:y=(h-text_h)/2", "lower_third": "x=w*0.06:y=h*0.74-text_h",
+               "caption": "x=(w-text_w)/2:y=h*0.92-text_h", "label": "x=w*0.04:y=h*0.05"}.get(style, "x=(w-text_w)/2:y=(h-text_h)/2")
+    return f"{common}:fontsize={int(px)}:{pos}:{look}"
 
 
 def text_key(text):
@@ -244,7 +284,113 @@ def text_key(text):
 
 ACTION_TYPES = ("keep", "cut", "trim", "effect", "transition", "cut_style", "grade", "auto_grade", "text",
                 "remove_text", "voiceover", "remove_voiceover", "intro", "outro", "target", "broll_share",
-                "music_volume", "captions", "privacy_blur", "stabilise", "lut", "add_broll")
+                "music_volume", "captions", "privacy_blur", "stabilise", "lut", "add_broll", "split", "cut_words",
+                "edit_text", "broll_mode", "graphic", "edit_graphic", "remove_graphic")
+PAGE_RE = re.compile(r"graphics/[\w\- .]{1,80}\.html")
+SCENE = 75.0  # seconds: B-roll further than this from the talking it accompanies is from another scene
+
+
+def _rejoin(words):
+    return " ".join(w[0] for w in words).strip()
+
+
+def remove_range(c, kind, it, a, b):
+    """Take source time [a, b] out of an item; a == b just splits it. The piece after the cut becomes a new item
+    appended to the clip's list (so existing ids never shift). Cut edges are hard (`cut_in`/`cut_out`): no padding,
+    no merging back. Returns a description."""
+    s, e = it["start"], it["end"]
+    a, b = max(s, min(a, e)), max(s, min(b, e))
+    if b < a:
+        a, b = b, a
+    head, tail = a - s >= 0.2, e - b >= 0.2
+    if not head and not tail:
+        it["keep"] = False
+        return "cut the whole line"
+    words = it.get("words") or []
+    if not words and it.get("text"):  # older transcripts: spread the words evenly over the line
+        ws = it["text"].split()
+        step = (e - s) / max(1, len(ws))
+        words = [[w, round(s + k * step, 2), round(s + (k + 1) * step, 2)] for k, w in enumerate(ws)]
+    before = [w for w in words if (w[1] + w[2]) / 2 < a]  # a word goes where most of it is
+    after = [w for w in words if (w[1] + w[2]) / 2 >= b]
+    later = {"texts": [], "voiceovers": []}
+    for key in later:
+        keep_here = []
+        for x in it.get(key) or []:
+            at = s + float(x.get("offset", 0))
+            (later[key] if at >= b else keep_here).append(
+                {**x, "offset": round(max(0.0, at - b), 2)} if at >= b else x)
+        if it.get(key) is not None:
+            it[key] = keep_here
+    if not head:  # cut from the start: trim, and titles there move to the new start
+        for key in later:
+            if it.get(key) is not None:
+                it[key] = [{**x, "offset": 0.0} for x in it[key]] + later[key]
+        it.update(start=round(b, 2), cut_in=True)
+        if words:
+            it["words"], it["text"] = after, _rejoin(after) or it["text"]
+        return f"trimmed the start to {b:.1f} s"
+    new = None
+    if tail:
+        new = {k: copy.deepcopy(v) for k, v in it.items() if k not in ("texts", "voiceovers", "transition", "cut_in")}
+        new.update(start=round(b, 2), end=e, cut_in=True, **{k: v for k, v in later.items() if v})
+        if words:
+            new["words"], new["text"] = after, _rejoin(after) or new["text"]
+        c[kind].append(new)
+    else:  # cut to the end: titles that started in the cut stay, just earlier
+        for key in later:
+            if later[key]:
+                it[key] = (it.get(key) or []) + [{**x, "offset": round(max(0.0, a - s - 2), 2)} for x in later[key]]
+    it.update(end=round(a, 2), cut_out=True)
+    if words:
+        it["words"], it["text"] = before, _rejoin(before) or it["text"]
+    return f"split at {a:.1f} s" if a == b else f"cut {a:.1f}–{b:.1f} s"
+
+
+def nearest_line(project, c, a, b, min_len=0.0, taken=()):
+    """The kept line of clip c closest to [a, b] (gap in seconds) that is at least min_len long: (gap, id, line)."""
+    ci = project["clips"].index(c)
+    best = None
+    for i, s in enumerate(c.get("segments") or []):
+        iid = item_id(ci, "segments", i)
+        if not s.get("keep") or s["end"] - s["start"] < min_len or iid in taken:
+            continue
+        gap = max(0.0, s["start"] - b, a - s["end"])
+        if best is None or gap < best[0]:
+            best = (gap, iid, s)
+    return best
+
+
+def place_broll(project, style="auto", scene=SCENE):
+    """Put every kept B-roll window where the story is: laid over (cutaway) or next to the talking of its own scene.
+
+    A window more than `scene` seconds from any kept line in its clip shows a different place and time from what's
+    being said, so it is dropped (unticked) rather than dropped in at random. With style "auto"/"cutaway" a window
+    covers the nearest long-enough kept line (one cutaway per line, starting 1 s in so the speaker is seen first);
+    "insert" (or no long-enough line) keeps it as its own part between the lines, in source order."""
+    moved = dropped = 0
+    for c in project["clips"]:
+        if c.get("angle_of"):
+            continue
+        taken = set()
+        for w in sorted(c.get("broll") or [], key=lambda w: w["start"]):
+            w.pop("over", None)
+            if not w.get("keep"):
+                continue
+            near = nearest_line(project, c, w["start"], w["end"])
+            if not near or near[0] > scene:
+                if w.get("reason", "").startswith("you"):  # added or marked by the creator: their call
+                    continue
+                w["keep"] = False
+                dropped += 1
+                continue
+            dur = w["end"] - w["start"]
+            line = nearest_line(project, c, w["start"], w["end"], dur + 1.5, taken) if style != "insert" else None
+            if line and line[0] <= scene:
+                w["over"], w["offset"] = line[1], 1.0
+                taken.add(line[1])
+                moved += 1
+    return moved, dropped
 
 # The JSON schema the LLM's output is constrained to (Ollama `format` / LM Studio `json_schema`), so it can't
 # invent fields or return something unparseable.
@@ -257,6 +403,8 @@ ACTION_SCHEMA = {
         "text": {"type": "string"},
         "start": {"type": "number"}, "end": {"type": "number"},
         "offset": {"type": "number"}, "duration": {"type": "number"}, "amount": {"type": "number"},
+        "index": {"type": "number"}, "x": {"type": "number"}, "y": {"type": "number"}, "size": {"type": "number"},
+        "over": {"type": "string"},
         "params": {"type": "object", "properties": {k: {"type": "number"} for k in
                                                     ("exposure", "contrast", "saturation", "temperature", "vignette")}},
     },
@@ -289,6 +437,21 @@ def _ids(project, a, need=True):
         raise ValueError(f"unknown part id(s): {', '.join(i for i, _ in bad)}")
     if need and not out:
         raise ValueError("needs at least one part id")
+    return out
+
+
+def all_graphics(project):
+    """(item id, kind, item, graphic) for every graphic in the edit."""
+    for iid, c, kind, i, it in items(project):
+        for g in it.get("graphics") or []:
+            yield iid, kind, it, g
+
+
+def _placement(a):
+    """Position on the frame for text placed on the monitor: x/y = centre (0..1), size = fraction of the height."""
+    out = {k: round(max(0.0, min(1.0, float(a[k]))), 4) for k in ("x", "y") if a.get(k) is not None}
+    if a.get("size") is not None:
+        out["size"] = round(max(0.02, min(0.3, float(a["size"]))), 4)
     return out
 
 
@@ -369,7 +532,7 @@ def apply_action(project, a, taste=None):
             style = a.get("value") or "lower_third"
             if style not in TEXT_STYLES:
                 raise ValueError(f"text style must be one of {', '.join(TEXT_STYLES)}")
-            entry.update(style=style, duration=max(1.0, min(15.0, float(a.get("duration") or 4))))
+            entry.update(style=style, duration=max(0.5, min(30.0, float(a.get("duration") or 4))), **_placement(a))
         it.setdefault(key, []).append(entry)
         return f"{'Text' if t == 'text' else 'Voice-over'} on {iid}: “{text[:40]}”"
     if t in ("remove_text", "remove_voiceover"):
@@ -383,10 +546,12 @@ def apply_action(project, a, taste=None):
             project[t] = None
             return f"Removed the {t}"
         style = a.get("style") or project.get(t, {}) and project[t].get("style") or "bold"
+        over = a.get("over") if "over" in a else (project.get(t) or {}).get("over", False)
         project[t] = {"title": title[:80], "subtitle": str(a.get("value", ""))[:120], "style": style
                       if style in INTRO_STYLES else "bold",
-                      "duration": max(2.0, min(10.0, float(a.get("duration") or 4)))}
-        return f"{t.capitalize()}: “{title}”"
+                      "duration": max(2.0, min(10.0, float(a.get("duration") or 4))),
+                      "over": str(over).lower() in ("true", "1", "on", "yes")}
+        return f"{t.capitalize()}: “{title}”" + (" over the video" if project[t]["over"] else "")
     if t == "target":
         project["target_length"] = str(a.get("value", ""))
         return f"Target length: {project['target_length'] or 'none'}"
@@ -420,6 +585,76 @@ def apply_action(project, a, taste=None):
                                           "reason": a.get("text") or "added by you"})
         c["broll"].sort(key=lambda w: w["start"])
         return f"Added {b0 - a0:.1f} s of B-roll from {c['name']}"
+    if t in ("split", "cut_words"):
+        (iid, (c, kind, i, it)), = _ids(project, a)[:1]
+        a0 = float(a.get("start", it["start"]))
+        b0 = a0 if t == "split" else float(a.get("end", a0))
+        if t == "split" and not it["start"] + 0.2 <= a0 <= it["end"] - 0.2:
+            raise ValueError(f"split point must be inside {iid} ({it['start']:.1f}–{it['end']:.1f} s)")
+        if t == "cut_words" and b0 - a0 < 0.05:
+            raise ValueError("cut_words needs start < end (source seconds)")
+        return f"{iid}: {remove_range(c, kind, it, a0, b0)}"
+    if t == "edit_text":
+        (iid, (c, kind, i, it)), = _ids(project, a)[:1]
+        texts, k = it.get("texts") or [], int(a.get("index", 0))
+        if not 0 <= k < len(texts):
+            raise ValueError(f"{iid} has no text #{k}")
+        x = texts[k]
+        if "text" in a:
+            if not str(a["text"]).strip():
+                texts.pop(k)
+                return f"Removed a text from {iid}"
+            x["text"] = str(a["text"]).strip()[:300]
+        if a.get("value") in TEXT_STYLES:
+            x["style"] = a["value"]
+        if "offset" in a:
+            x["offset"] = round(max(0.0, float(a["offset"])), 2)
+        if "duration" in a:
+            x["duration"] = round(max(0.5, min(30.0, float(a["duration"]))), 2)
+        x.update(_placement(a))
+        return f"Edited “{x['text'][:30]}” on {iid}"
+    if t == "graphic":  # an animated page (graphics/*.html in the project folder) over this part
+        (iid, (c, kind, i, it)), = _ids(project, a)[:1]
+        page = str(a.get("value", "")).replace("\\", "/")
+        if not PAGE_RE.fullmatch(page):
+            raise ValueError("graphic needs value = a page in the project's graphics folder, e.g. graphics/title.html")
+        gid = "g" + hashlib.sha1(f"{page}{iid}{len(list(all_graphics(project)))}".encode()).hexdigest()[:6]
+        it.setdefault("graphics", []).append({"id": gid, "page": page, "offset": round(max(0.0, float(a.get("offset") or 0)), 2),
+                                              "duration": round(max(0.3, min(120.0, float(a.get("duration") or 4))), 2),
+                                              **({"template": str(a["text"])[:40]} if a.get("text") else {})})
+        return f"Graphic {gid} ({Path(page).stem}) on {iid}"
+    if t in ("edit_graphic", "remove_graphic"):
+        gid = str(a.get("value", ""))
+        hit = next(((it, g) for _, _, it, g in all_graphics(project) if g["id"] == gid), None)
+        if not hit:
+            raise ValueError(f"no graphic '{gid}'")
+        it, g = hit
+        if t == "remove_graphic":
+            it["graphics"].remove(g)
+            return f"Removed graphic {gid}"
+        if "offset" in a:
+            g["offset"] = round(max(0.0, float(a["offset"])), 2)
+        if "duration" in a:
+            g["duration"] = round(max(0.3, min(120.0, float(a["duration"]))), 2)
+        if a.get("ids"):  # move it onto another part
+            (iid, (c, kind, i, new)), = _ids(project, a)[:1]
+            it["graphics"].remove(g)
+            new.setdefault("graphics", []).append(g)
+        return f"Moved graphic {gid}"
+    if t == "broll_mode":
+        hits = _ids(project, a)
+        mode = a.get("value", "cutaway")
+        for iid, (c, kind, i, it) in hits:
+            if kind != "broll":
+                raise ValueError(f"{iid} is not B-roll")
+            it.pop("over", None)
+            if mode == "cutaway":
+                target = a.get("over") or (nearest_line(project, c, it["start"], it["end"]) or (0, None))[1]
+                hit = find(project, target) if target else None
+                if not hit or hit[1] != "segments":
+                    raise ValueError(f"no kept line to lay {iid} over")
+                it.update(over=target, offset=max(0.0, float(a.get("offset", 1.0))), keep=True)
+        return f"B-roll {'over the talking' if mode == 'cutaway' else 'as its own shot'}: {len(hits)} window(s)"
     if t == "stabilise":
         hits = _ids(project, a)
         for _, (c, kind, i, it) in hits:
@@ -460,7 +695,8 @@ def context(project, max_text=70):
         fx = [x for x in (it.get("effect") not in (None, "none") and it.get("effect"),
                           (it.get("transition") or {}).get("type"),
                           it.get("texts") and f"{len(it['texts'])} text", it.get("voiceovers") and "voice-over",
-                          it.get("grade") and "own grade") if x]
+                          it.get("grade") and "own grade",
+                          it.get("graphics") and "graphics " + ",".join(f"{g['id']}={g['page']}" for g in it["graphics"])) if x]
         what = it["text"][:max_text] if kind == "segments" else f"[B-roll, no talking] {it.get('desc', it.get('reason', ''))}"
         rows.append(f"{iid} | {fmt_t(it['start'])}-{fmt_t(it['end'])} | {it['end'] - it['start']:.0f}s | "
                     f"{'KEEP' if it.get('keep') else 'cut'} | {('★%s' % it['score']) if it.get('score') else '-'} | "

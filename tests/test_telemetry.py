@@ -1,4 +1,4 @@
-"""GPMF parsing and ride analysis on a synthetic GoPro ride (no real footage needed)."""
+"""GPMF parsing and ride analysis: a synthetic GoPro ride, built GPMF snippets and a real HERO13 fixture (offline)."""
 import struct
 import sys
 import tempfile
@@ -11,7 +11,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import telemetry  # noqa: E402
 import video_engine  # noqa: E402
 
-FMT = {"s": "h", "l": "i", "L": "I"}
+FMT = {"s": "h", "S": "H", "l": "i", "L": "I"}
+FIXTURE = Path(__file__).resolve().parent / "fixtures" / "gopro13_ride_gpmd.mov"  # see fixtures/LICENSE.md
 RIDE = 305  # s: stop, pull away, hard brake, twisties, climb to a summit, motorway with an overtake, stop
 
 
@@ -21,6 +22,10 @@ def klv(key, typ, rows):
         payload, size = rows, 4
     elif typ == "c":
         payload, size = rows.encode("latin-1"), len(rows)
+    elif typ == "?":  # complex: rows are (struct format, tuples), e.g. GPS9 "lllllllSS"
+        fmt, rows = rows
+        payload = b"".join(struct.pack(">" + "".join(FMT[c] for c in fmt), *r) for r in rows)
+        size = len(payload) // len(rows)
     else:
         payload = b"".join(struct.pack(f">{len(r)}{FMT[typ]}", *r) for r in rows)
         size = len(payload) // len(rows)
@@ -45,7 +50,11 @@ def ride():
 
 
 def gpmf_bytes():
-    """One DEVC per second: a GPS stream (no lock in second 0) and an ACCL stream (Z,X,Y order, 50 Hz)."""
+    """One DEVC per second: a GPS stream (no lock in second 0) and an ACCL stream (Z,X,Y order, 50 Hz).
+
+    Each DEVC is padded to 1024 bytes, the packet size of FFmpeg's raw data demuxer, so a muxed file keeps one DEVC
+    per packet like a camera does.
+    """
     t, v, lat, lon, alt, acc = ride()
     out = b""
     for s in range(RIDE):
@@ -56,7 +65,8 @@ def gpmf_bytes():
         gps_strm = (klv("STNM", "c", "GPS (Lat., Long., Alt., 2D, 3D)") + klv("GPSF", "L", [(0 if s == 0 else 3,)])
                     + klv("SCAL", "l", [(10 ** 7,), (10 ** 7,), (1000,), (1000,), (100,)]) + klv("GPS5", "l", gps))
         acc_strm = klv("SCAL", "s", [(418,)]) + klv("ACCL", "s", acc_rows)
-        out += klv("DEVC", "\0", klv("DVID", "L", [(1,)]) + klv("STRM", "\0", acc_strm) + klv("STRM", "\0", gps_strm))
+        devc = klv("DVID", "L", [(1,)]) + klv("STRM", "\0", acc_strm) + klv("STRM", "\0", gps_strm)
+        out += klv("DEVC", "\0", devc + klv("FILL", "L", [(0,)] * ((1024 - 16 - len(devc)) // 4)))
     return out
 
 
@@ -117,12 +127,72 @@ def test_read_gopro_from_files():
         plain, gopro, raw = Path(tmp) / "plain.mp4", Path(tmp) / "gopro.mov", Path(tmp) / "gpmf.bin"
         video_engine._ffmpeg(["-y", "-f", "lavfi", "-i", "testsrc=d=1:s=64x64", "-c:v", "mpeg4", str(plain)])
         assert not telemetry.has_gpmf(plain) and telemetry.read_gopro(plain) == {}
-        # a real GoPro track is MP4; FFmpeg only muxes a gpmd track into MOV, which parses the same way
+        # a real GoPro track is MP4; FFmpeg only muxes a gpmd track into MOV, which parses the same way.
+        # Packets are 1.001 s apart, as on a camera: times follow them instead of drifting 1 ms per second
         raw.write_bytes(gpmf_bytes())
         video_engine._ffmpeg(["-y", "-i", str(plain), "-f", "data", "-i", str(raw), "-map", "0", "-map", "1",
-                              "-c", "copy", "-tag:d", "gpmd", "-bsf:d", "setts=ts=N*100:duration=100", str(gopro)])
+                              "-c", "copy", "-tag:d", "gpmd", "-bsf:d", "setts=ts=N*1.001/TB:duration=1.001/TB",
+                              str(gopro)])
         assert telemetry.has_gpmf(gopro)
-        assert telemetry.read_gopro(gopro) == TEL
+        tel = telemetry.read_gopro(gopro)
+        assert tel.keys() == TEL.keys() and all(len(tel[k]) == len(TEL[k]) for k in TEL)
+        for k in TEL:
+            assert all(abs(a[0] - b[0] * 1.001) < 1e-6 and a[1:] == b[1:] for a, b in zip(tel[k], TEL[k]))
+        assert abs(tel["gps"][-1][0] - TEL["gps"][-1][0]) > 0.3  # the old 1 s/packet guess was 0.3 s off by 5 min
+
+
+def test_packets_from_framecrc():
+    crc = "#tb 0: 1/1000\n#media_type 0: data\n0, 0, 0, 1001, 9960, 0x1\n0, 1001, 1001, 1001, 10004, 0x2\n" \
+          "0, 2002, 2002, 1126, 7628, 0x3\n"
+    # FFmpeg stretches the last packet to the file's end (the MP4 says 0.667 s): capped at the previous duration
+    assert telemetry._packets(crc) == [(0.0, 1.001, 9960), (1.001, 1.001, 10004), (2.002, 1.001, 7628)]
+    data = klv("DEVC", "\0", klv("STRM", "\0", klv("ACCL", "s", [(1, 2, 3)] * 4)))
+    assert telemetry.parse_gpmf(data, [(5.0, 2.0, len(data) + 1)])["accel"][1][0] == 0.25  # sizes disagree: 1 s
+
+
+def test_gps9_preferred_over_gps5_with_per_sample_fix_and_dop():
+    """HERO11 writes GPS5 and GPS9 side by side (HERO13: GPS9 only); GPS9 carries fix and DOP per sample."""
+    scal9 = [(10 ** 7,), (10 ** 7,), (1000,), (1000,), (100,), (1,), (1000,), (100,), (1,)]
+    # lat, lon, alt, speed2d, speed3d, days since 2000, s since midnight, DOP x100, fix
+    rows = [(424261529, -86499795, 34098, 8132, 816, 8298, 48576899, 179, 3),
+            (424261530, -86499790, 34100, 8195, 813, 8298, 48576999, 9999, 3),  # DOP 99.99: junk
+            (424261531, -86499785, 34102, 8194, 809, 8298, 48577099, 150, 0),  # no fix
+            (424261532, -86499780, 34104, 8200, 820, 8298, 48577199, 268, 2)]
+    gps9 = klv("STRM", "\0", klv("TYPE", "c", "lllllllSS") + klv("SCAL", "l", scal9)
+               + klv("GPS9", "?", ("lllllllSS", rows)))
+    gps5 = klv("STRM", "\0", klv("GPSF", "L", [(3,)]) + klv("GPSP", "S", [(150,)]) + klv("SCAL", "l", scal9[:5])
+               + klv("GPS5", "l", [r[:5] for r in rows]))
+    tel = telemetry.parse_gpmf(klv("DEVC", "\0", gps5 + gps9))
+    assert tel["gps"] == [(0.0, 42.4261529, -8.6499795, 34.098), (0.75, 42.4261532, -8.649978, 34.104)]
+    assert tel["speed"] == [(0.0, 8.132), (0.75, 8.2)]
+    # GPS5 alone: one GPSF/GPSP for the whole packet
+    assert len(telemetry.parse_gpmf(klv("DEVC", "\0", gps5))["gps"]) == 4
+    bad = gps5.replace(struct.pack(">H", 150), struct.pack(">H", 9999))
+    assert telemetry.parse_gpmf(klv("DEVC", "\0", bad)) == {}
+
+
+def test_several_devc_per_packet_share_its_time():
+    """A Karma drone (or a BLE sensor) adds its own DEVC to each packet: one packet is still one span of time."""
+    cam = klv("DEVC", "\0", klv("DVID", "L", [(1,)]) + klv("STRM", "\0", klv("ACCL", "s", [(1, 2, 3)] * 2)))
+    drone = klv("DEVC", "\0", klv("DVID", "L", [(16835857,)]) + klv("STRM", "\0", klv("EMPT", "L", [(0,)])))
+    data = (cam + drone) * 2
+    tel = telemetry.parse_gpmf(data, [(0.0, 1.001, len(cam + drone)), (1.001, 1.001, len(cam + drone))])
+    assert [round(a[0], 4) for a in tel["accel"]] == [0.0, 0.5005, 1.001, 1.5015]
+
+
+def test_real_hero13_ride_matches_gpmf_parser():
+    """3 s of a real HERO13 bike ride; expected values are GoPro's gpmf-parser (GPMF_ScaledData) on the same file."""
+    assert telemetry.has_gpmf(FIXTURE)
+    tel = telemetry.read_gopro(FIXTURE)
+    # 30 GPS9 samples in 3 packets of 1.001 s; the first two have DOP 99.99 and 10.68 and are dropped
+    assert len(tel["gps"]) == 28 and len(tel["accel"]) == 602
+    t, lat, lon, alt = tel["gps"][0]
+    assert abs(t - 0.2002) < 1e-9 and (lat, lon, alt) == (40.8509104, -73.9480974, 98.759)
+    assert tel["gps"][-1][1:] == (40.8508839, -73.9478393, 73.675) and abs(tel["gps"][-1][0] - 2.9029) < 1e-9
+    assert tel["speed"][0][1] == 8.132 and all(7.5 < v < 9 for _, v in tel["speed"])  # ~30 km/h on a bike
+    # gpmf-parser's first ACCL sample in its Z,X,Y output order: -8.79376499 -4.94244604 -1.9616307
+    _, ax, ay, az = tel["accel"][0]
+    assert abs(ax + 4.94244604) < 1e-7 and abs(ay + 1.9616307) < 1e-7 and abs(az + 8.79376499) < 1e-7
 
 
 if __name__ == "__main__":

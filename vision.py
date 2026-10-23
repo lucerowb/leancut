@@ -1,7 +1,7 @@
 """On-device vision: privacy blur (faces, plates), CLIP frame search and scenic scores, subject tracking for 9:16.
 
-Models are downloaded on first use into a folder the caller chooses (never bundled) and run with onnxruntime on the
-CPU. Decoding, NMS, tracking and smoothing are plain numpy so they can be tested without any model.
+Models are downloaded on first use into a folder the caller chooses (never bundled) and run with onnxruntime, on a GPU
+when onnx_runtime finds one. Decoding, NMS, tracking and smoothing are plain numpy so they can be tested without any model.
 """
 import functools
 from pathlib import Path
@@ -17,6 +17,7 @@ MODELS = {
     "plate": {  # LPD-YuNet, https://github.com/opencv/opencv_zoo/tree/main/models/license_plate_detection_yunet
         "repo": "opencv/license_plate_detection_yunet", "file": "license_plate_detection_lpd_yunet_2023mar.onnx",
         "revision": "962e8d8849878106cb84039dab61cf97bb683b31", "license": "Apache-2.0", "size_mb": 4.0,
+        "coreml": True,  # M5 Pro: 1.9-2.4 ms vs 3.5 ms on the CPU, outputs within 1.5e-5 (YuNet face: no gain, so CPU)
     },
     # OpenAI CLIP ViT-B/32 (MIT, https://github.com/openai/CLIP), int8 ONNX export by Xenova (transformers.js)
     "clip_vision": {
@@ -58,12 +59,9 @@ def ensure_model(name, models_dir) -> Path:
 
 
 @functools.cache
-def _session(path):
-    import onnxruntime as ort
-    opts = ort.SessionOptions()
-    opts.log_severity_level = 3
-    # shortcut: CPU only; try CoreMLExecutionProvider / CUDA if embedding hours of footage gets too slow
-    return ort.InferenceSession(str(path), opts, providers=["CPUExecutionProvider"])
+def _session(name, models_dir):
+    import onnx_runtime
+    return onnx_runtime.session(ensure_model(name, models_dir), coreml=MODELS[name].get("coreml", False))
 
 
 @functools.cache
@@ -149,7 +147,7 @@ def detect(name, image_bgr_uint8, models_dir):
     """Faces or licence plates in one BGR image: [(x, y, w, h, score)] in that image's pixels, best first."""
     if name not in ("face", "plate"):
         raise ValueError(f"Unknown detector '{name}' (use 'face' or 'plate').")
-    sess = _session(ensure_model(name, models_dir))
+    sess = _session(name, models_dir)
     inp = sess.get_inputs()[0]
     H, W = inp.shape[2], inp.shape[3]  # both models have a fixed input: face 640×640, plate 320×240
     blob, s = letterbox(image_bgr_uint8, W, H)
@@ -286,7 +284,7 @@ def embed_frames(src, cache_file, models_dir, every=2.0) -> dict:
     if cache_file and cache_file.exists():
         with np.load(cache_file) as d:
             return {"t": d["t"].tolist(), "emb": d["emb"]}
-    sess = _session(ensure_model("clip_vision", models_dir))
+    sess = _session("clip_vision", models_dir)
     ts, embs, batch = [], [], []
 
     def flush():
@@ -313,7 +311,7 @@ def embed_text(texts, models_dir):
     """CLIP text embeddings, (n, 512) L2-normalised."""
     np = _np()
     tok = _tokenizer(ensure_model("clip_tokenizer", models_dir))
-    sess = _session(ensure_model("clip_text", models_dir))
+    sess = _session("clip_text", models_dir)
     out = []
     for text in texts:  # one at a time: no padding, so the model's end-of-text pooling is unambiguous
         ids = tok.encode(text).ids

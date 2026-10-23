@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1920, height=1080">
+<title>Quote</title>
+<script type="application/json" id="leancut-template">
+{"name": "Quote", "description": "A spoken line, highlighted word by word as it is said, with who said it.", "duration": 6,
+ "fields": {"quote": {"label": "Quote", "default": "The road doesn't end here. It just gets steeper."},
+            "author": {"label": "Who said it", "default": "Srijan, at Thorong La"}}}
+</script>
+<style>
+  html { font-size: calc(100vw / 192); }
+  html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; }
+  body {
+    --accent: #ff6a3d;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", "Nirmala UI", sans-serif;
+    color: #fff; -webkit-font-smoothing: antialiased;
+    display: flex; align-items: center; justify-content: center;
+  }
+  #shade { position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 50%, rgba(6, 8, 12, 0.45), rgba(6, 8, 12, 0) 70%); }
+  #block { position: relative; max-width: 136rem; padding: 0 4rem; }
+  #mark { position: absolute; left: -8.4rem; top: -12rem; font-size: 26rem; font-weight: 800; line-height: 1; color: var(--accent); font-family: Georgia, "Times New Roman", serif; }
+  #quote { margin: 0; font-size: 7.6rem; font-weight: 750; line-height: 1.18; letter-spacing: -0.015em; text-shadow: 0 0.3rem 2.4rem rgba(0, 0, 0, 0.45); }
+  #quote span { display: inline-block; }
+  #author { margin-top: 3.6rem; font-size: 3rem; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; opacity: 0.85; text-shadow: 0 0.2rem 1.4rem rgba(0, 0, 0, 0.5); }
+  #author::before { content: ""; display: inline-block; width: 4.8rem; height: 0.4rem; margin: 0 2rem 0.8rem 0; background: var(--accent); vertical-align: middle; }
+</style>
+</head>
+<body data-duration="{{duration}}">
+<div id="shade"></div>
+<div id="block">
+  <div id="mark">&ldquo;</div>
+  <p id="quote">{{quote}}</p>
+  <div id="author">{{author}}</div>
+</div>
+<script>
+const D = Number(document.body.dataset.duration) || 6;
+const clamp = (x) => Math.min(1, Math.max(0, x));
+const span = (t, a, b) => clamp((t - a) / (b - a));
+const outExpo = (x) => (x >= 1 ? 1 : 1 - Math.pow(2, -10 * x));
+const outBack = (x) => 1 + 2.4 * Math.pow(x - 1, 3) + 1.4 * Math.pow(x - 1, 2);
+const inCubic = (x) => x * x * x;
+const $ = (id) => document.getElementById(id);
+const shade = $('shade'), block = $('block'), mark = $('mark'), quote = $('quote'), author = $('author');
+if (!author.textContent.trim()) author.style.display = 'none';
+
+const words = quote.textContent.trim().split(/\s+/);
+quote.textContent = '';
+const spans = words.map((w, i) => {
+  const s = document.createElement('span');
+  s.textContent = w;
+  quote.appendChild(s);
+  if (i < words.length - 1) quote.appendChild(document.createTextNode(' '));
+  return s;
+});
+// each word lights up as it would be said, spread over the middle of the clip (weighted by its length)
+const sayFrom = 0.7, sayTo = Math.max(sayFrom + 0.5, D - 1.4);
+const weights = words.map((w) => w.length + 2);
+const total = weights.reduce((a, b) => a + b, 0);
+let acc = 0;
+const said = weights.map((w) => { const at = sayFrom + (sayTo - sayFrom) * (acc / total); acc += w; return at; });
+
+window.film = {
+  duration: D,
+  frame(t) {
+    shade.style.opacity = outExpo(span(t, 0, 0.8));
+    const m = span(t, 0, 0.6);
+    mark.style.opacity = clamp(m * 2);
+    mark.style.transform = `scale(${0.6 + 0.4 * outBack(m)})`;
+    spans.forEach((s, i) => {
+      const enter = outExpo(span(t, 0.15 + i * 0.035, 0.85 + i * 0.035));
+      const lit = outExpo(span(t, said[i], said[i] + 0.35));
+      s.style.opacity = enter * (0.38 + 0.62 * lit);
+      s.style.transform = `translateY(${(1 - enter) * 2}rem)`;
+    });
+    const a = outExpo(span(t, 0.9, 1.6));
+    author.style.opacity = 0.85 * a;
+    author.style.transform = `translateX(${(1 - a) * -2}rem)`;
+    const out = inCubic(span(t, D - 0.7, D));
+    block.style.opacity = 1 - out;
+    block.style.transform = `translateY(${-out * 2}rem)`;
+    if (out > 0) shade.style.opacity = 1 - out;
+  },
+};
+
+if (!window.filmHost) {
+  const t0 = performance.now();
+  const loop = () => { window.film.frame(((performance.now() - t0) / 1000) % D); requestAnimationFrame(loop); };
+  requestAnimationFrame(loop);
+}
+</script>
+</body>
+</html>

@@ -106,6 +106,7 @@ def probe(path) -> dict:
         "has_audio": bool(re.search(r"Stream #.*Audio:", err)),
         # cameras embed a start timecode (DJI: time of day, drop-frame); NLEs place clips by it
         "timecode": (re.search(r"timecode\s*:\s*(\d\d:\d\d:\d\d[:;.]\d\d)", err) or [None, None])[1],
+        "created": (re.search(r"creation_time\s*:\s*(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)", err) or [None, None])[1],
     }
 
 
@@ -219,6 +220,35 @@ def render(ranges, out_path, accurate=True, fmt=None, on_progress=lambda f: None
     return out_path
 
 
+def _part_video(sp, dur, still_at=None):
+    """Inputs and video filter args for one part spec. Overlays (cutaway B-roll, rendered graphics with alpha) are
+    composited between the look (`vf`) and the titles (`top`), so text stays on top. still_at: one frame at that
+    part-local time instead of the whole part (the agents' `look`)."""
+    src_in = ["-hwaccel", "auto", "-ss", f"{sp['start']:.3f}", "-t", f"{dur:.3f}", *inp(sp["src"])]
+    pick = f",select='gte(t\\,{still_at:.3f})'" if still_at is not None else ""
+    if not sp.get("overlays"):
+        return src_in, ["-vf", sp["vf"] + pick, "-map", "0:v:0"]
+    graph, last = [f"[0:v]{sp['vf']}[m0]"], "m0"
+    for k, o in enumerate(sp["overlays"], 1):
+        od = o["end"] - o["start"]
+        src_in += ["-ss", f"{o['start']:.3f}", "-t", f"{od:.3f}", *inp(o["src"])]
+        fade = (f",fade=t=in:d=0.2,fade=t=out:st={max(0.0, od - 0.2):.3f}:d=0.2:alpha=1"
+                if o.get("fade", True) else "")
+        graph.append(f"[{k}:v]{o['vf']},format=yuva420p{fade},setpts=PTS-STARTPTS+{o['at']:.3f}/TB[o{k}]")
+        graph.append(f"[{last}][o{k}]overlay=eof_action=pass:enable='between(t,{o['at']:.3f},"
+                     f"{o['at'] + od:.3f})'[m{k}]")
+        last = f"m{k}"
+    graph.append(f"[{last}]{sp.get('top') or 'null'}{pick}[v]")
+    return src_in, ["-filter_complex", ";".join(graph), "-map", "[v]"]
+
+
+def still_of(sp, t, width, workdir=None):
+    """JPEG of a part spec at part-local time t, rendered through the same filters as the export."""
+    src_in, video = _part_video(sp, min(sp["end"] - sp["start"], t + 0.5), t)
+    return _ffmpeg(["-y", *src_in, *video, "-frames:v", "1", "-s", f"{width}x{int(width * 9 / 16) // 2 * 2}",
+                    "-f", "mjpeg", "-"], binary=True, cwd=workdir).stdout
+
+
 def render_parts(specs, out_path, fmt, encoder="auto", cache_dir=None, workdir=None, on_progress=lambda f: None):
     """Two-stage render for edits with looks and transitions.
 
@@ -243,18 +273,22 @@ def render_parts(specs, out_path, fmt, encoder="auto", cache_dir=None, workdir=N
         st = Path(sp["src"]).stat() if Path(sp["src"]).exists() else None
         sig = [str(sp["src"]), st and st.st_mtime, st and st.st_size, sp["start"], sp["end"], sp.get("vf"),
                sp.get("af"), sp.get("silent"), sp.get("card"), codec]
+        if sp.get("overlays"):
+            sig += [sp.get("top"), sp["overlays"]]
         key = hashlib.sha1(json.dumps(sig, default=str).encode()).hexdigest()[:20]
         part = cache / f"{key}.mp4"
         dur = sp["end"] - sp["start"]
         if not part.exists():
             partial = cache / f".{key}.partial.mp4"
-            src_in = ["-hwaccel", "auto", "-ss", f"{sp['start']:.3f}", "-t", f"{dur:.3f}", *inp(sp["src"])]
-            if sp.get("silent") or sp.get("card"):
-                args = [*src_in, "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo", "-map", "0:v:0", "-map", "1:a:0",
-                        "-vf", sp["vf"], "-shortest"]
+            src_in, video = _part_video(sp, dur)
+            if sp.get("overlays"):  # cutaway B-roll / graphics: other pictures over this part while its sound runs on
+                af = ",".join(x for x in (sp.get("af"), "aresample=48000") if x)
+                args = [*src_in, *video, "-map", "0:a:0?", "-af", af]
+            elif sp.get("silent") or sp.get("card"):
+                args = [*src_in, "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo", *video, "-map", "1:a:0", "-shortest"]
             else:
                 af = ",".join(x for x in (sp.get("af"), "aresample=48000") if x)
-                args = [*src_in, "-map", "0:v:0", "-map", "0:a:0?", "-vf", sp["vf"], "-af", af]
+                args = [*src_in, *video, "-map", "0:a:0?", "-af", af]
             _ffmpeg(["-y", *args, *codec, *AUDIO_ARGS, str(partial)], cwd=workdir)
             partial.replace(part)
         files.append(part)

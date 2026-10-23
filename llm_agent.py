@@ -349,10 +349,13 @@ Action types (use only these, with only the listed fields):
 - cut_style {value: (a transition name), duration}  (default for every cut)
 - grade {ids (optional; empty = whole video), value: none|punchy|warm|cool|cinematic|teal_orange|moody|vintage|bright|bw, params: {exposure -1..1, contrast 0.5..1.5, saturation 0..2, temperature -1..1, vignette 0..1}}
 - auto_grade {value: on|off}
-- text {ids:[one id], text, value: title|lower_third|caption|label, offset (s into the part), duration}
+- text {ids:[one id], text, value: title|lower_third|caption|label|plain, offset (s into the part), duration, x, y (0..1 centre on the frame, optional), size (0.02..0.3 of the height, optional)}
+- edit_text {ids:[one id], index (0 = first text on that part), text (empty removes), offset, duration, x, y, size}
+- split {ids:[one id], start (source seconds inside it)}   - cut_words {ids:[one id], start, end} (cut just those words, source seconds)
+- broll_mode {ids: B-roll ids, value: cutaway (picture over the nearest kept line, talking continues; optional over: line id, offset) | insert (its own shot)}
 - voiceover {ids:[one id], text, offset}   (spoken in the creator's cloned voice)
 - remove_text / remove_voiceover {ids}
-- intro / outro {text: title (empty removes), value: subtitle, duration}
+- intro / outro {text: title (empty removes), value: subtitle, duration, over: true to show it over the first/last shot instead of a card}
 - target {value: e.g. "8 minutes"}   - broll_share {amount 0..60}   - music_volume {amount 0..0.6}
 - captions {value: on|off}   - privacy_blur {value: on|off}   - stabilise {ids, value: on|off}
 - add_broll {value: clip id, start, end, text: why}   (add silent footage as B-roll)
@@ -464,3 +467,86 @@ def youtube_metadata(lines, provider, base_url, model, max_chars=CHUNK_CHARS * 2
     return {"title": str(data.get("title", "")).strip(), "description": str(data.get("description", "")).strip(),
             "tags": [str(t).strip() for t in data.get("tags", []) if str(t).strip()][:15],
             "chapters": [(s, n) for s, n in chapters if s is not None and n]}
+
+
+# ---------------------------------------------------------------- agent with tools (local "coding agent" for the edit)
+
+def capabilities(provider, base_url, model):
+    """What a local model can do: {"tools": bool, "vision": bool}. Ollama says so in /api/show; for other servers
+    assume tools (most OpenAI-compatible servers accept them) and no pictures."""
+    if provider != "ollama":
+        return {"tools": True, "vision": False}
+    try:
+        caps = _http(f"{base_url.rstrip('/')}/api/show", {"model": model}).get("capabilities") or []
+    except LLMError:
+        caps = []
+    return {"tools": "tools" in caps, "vision": "vision" in caps}
+
+
+def agent_loop(provider, base_url, model, system, messages, tools, call_tool, on_event=lambda kind, text: None,
+               max_steps=16, check_cancel=lambda: None, num_ctx=16384, vision=False):
+    """Run a tool-using conversation until the model answers without calling a tool.
+
+    tools: [{"name", "description", "input_schema"}]; call_tool(name, args) -> {"content": [...], "isError": bool}
+    (MCP-shaped, the same tools coding agents get over MCP). Pictures from tools go to the model only when it can
+    see them (vision=True). Returns (final text, messages)."""
+    base = base_url.rstrip("/")
+    spec = [{"type": "function", "function": {"name": t["name"], "description": t["description"],
+                                              "parameters": t["input_schema"]}} for t in tools]
+    msgs = [{"role": "system", "content": system}, *messages]
+    for step in range(max_steps):
+        check_cancel()
+        if provider == "ollama":
+            content, calls = [], []
+
+            def line(raw):
+                d = json.loads(raw)
+                if "error" in d:
+                    raise LLMError(f"Ollama error: {d['error']}")
+                m = d.get("message") or {}
+                content.append(m.get("content") or "")
+                calls.extend(m.get("tool_calls") or [])
+
+            _http(f"{base}/api/chat", {"model": model, "messages": msgs, "tools": spec, "stream": True, "think": False,
+                                       "options": {"temperature": 0.2, "num_ctx": num_ctx}}, 300, line)
+            text = "".join(content).strip()
+            calls = [{"id": f"call{step}_{k}", "name": c["function"]["name"],
+                      "args": c["function"].get("arguments") or {}} for k, c in enumerate(calls)]
+            msgs.append({"role": "assistant", "content": text,
+                         "tool_calls": [{"function": {"name": c["name"], "arguments": c["args"]}} for c in calls]})
+        else:  # OpenAI-compatible (LM Studio…): not streamed, so the tool-call pieces needn't be reassembled
+            r = _http(f"{base}/chat/completions", {"model": model, "messages": msgs, "tools": spec,
+                                                   "temperature": 0.2}, 600)
+            m = (r.get("choices") or [{}])[0].get("message") or {}
+            text = (m.get("content") or "").strip()
+            calls = []
+            for c in m.get("tool_calls") or []:
+                try:
+                    args = json.loads(c["function"].get("arguments") or "{}")
+                except json.JSONDecodeError:
+                    args = {}
+                calls.append({"id": c.get("id") or f"call{step}", "name": c["function"]["name"], "args": args})
+            msgs.append({"role": "assistant", "content": text or None, "tool_calls": m.get("tool_calls")} if calls
+                        else {"role": "assistant", "content": text})
+        if text:
+            on_event("say", text)
+        if not calls:
+            return text, msgs[1:]
+        for c in calls:
+            check_cancel()
+            on_event("tool", f"{c['name']} {json.dumps(c['args'], ensure_ascii=False)[:200]}")
+            try:
+                res = call_tool(c["name"], c["args"] if isinstance(c["args"], dict) else {})
+            except Exception as e:  # a failing tool is the model's problem to solve, not a crash
+                res = {"content": [{"type": "text", "text": f"Error: {e}"}], "isError": True}
+            out = "\n".join(x["text"] for x in res["content"] if x["type"] == "text")[:8000] or "(no text)"
+            pics = [x["data"] for x in res["content"] if x["type"] == "image"]
+            on_event("result", ("ERROR " if res.get("isError") else "") + out[:300])
+            if provider == "ollama":
+                msg = {"role": "tool", "content": out, "tool_name": c["name"]}
+                if pics and vision:
+                    msg["images"] = pics
+                msgs.append(msg)
+            else:
+                msgs.append({"role": "tool", "tool_call_id": c["id"], "content": out})
+    return "I stopped after the maximum number of steps; ask me to continue.", msgs[1:]

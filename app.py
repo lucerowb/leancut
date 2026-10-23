@@ -3,6 +3,8 @@
 Run:  python app.py      (browser UI at http://127.0.0.1:8765)
       python desktop.py  (native desktop window)
 """
+import atexit
+import base64
 import json
 import os
 import re
@@ -19,6 +21,7 @@ from fastapi import FastAPI, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+import agent_tools
 import editing
 import exporters
 import llm_agent
@@ -30,7 +33,7 @@ import video_engine
 from video_engine import Cancelled, check_cancel
 
 APP_NAME = "LeanCut"
-VERSION = "0.3.0"
+VERSION = "0.4.0"
 ROOT = Path(__file__).parent
 RESOURCES = Path(getattr(sys, "_MEIPASS", ROOT))  # PyInstaller unpacks bundled files here
 
@@ -63,6 +66,7 @@ DEFAULT_SETTINGS = {
     "markers": "clip that, mark this, mark that, keep this, bookmark",
     # rider features
     "broll": True, "broll_share": 15, "moments": True, "connectors": False,
+    "broll_style": "auto",  # "auto"/"cutaway": B-roll over the talking of its scene when possible; "insert": own shots
     # video & audio
     "render_mode": "accurate", "encoder": "auto",
     "loudness": True, "denoise": False, "music_path": "", "music_volume": 0.15,
@@ -84,6 +88,19 @@ DEFAULT_SETTINGS = {
 }
 PROJECT_DEFAULTS = {"grade": {}, "cut_style": {"type": "cut"}, "intro": None, "outro": None, "captions": False,
                     "privacy_blur": False, "chat": [], "suggestions": []}
+def stamp(name):
+    m = re.search(r"(20\d\d)(\d\d)(\d\d)[_-]?(\d\d)(\d\d)(\d\d)", Path(name).stem)
+    return "%s-%s-%sT%s:%s:%s" % m.groups() if m else None
+
+
+def recorded_at(name, created):
+    """Sortable recording time. A timestamp in the file name (DJI_20261016210207…, PXL_20261016_210207…, VID_…) is
+    local time on every camera and phone, so it wins over the container's creation time (UTC on phones, local on
+    GoPro and DJI) when cameras are mixed."""
+    return stamp(name) or created
+
+
+SERVER_URL = ""  # where this LeanCut listens, for coding agents (see announce)
 undo = {}  # project id -> {"back": [snapshots], "forward": [snapshots]}; in memory only
 
 
@@ -152,6 +169,10 @@ def open_project(pid):
     for c in project["clips"]:  # clips added before v0.2 lack the start timecode NLE exports need
         if "timecode" not in c and Path(c["path"]).exists():
             c["timecode"] = video_engine.probe(c["path"]).get("timecode")
+            save()
+        if "recorded" not in c:  # v0.4: recording time, so clips can be put in story order
+            info = video_engine.probe(c["path"]) if Path(c["path"]).exists() and not stamp(c["name"]) else {}
+            c["recorded"] = recorded_at(c["name"], info.get("created"))
             save()
     settings["current_project"] = pid
     save_settings()
@@ -241,10 +262,13 @@ def parse_target(text):
 
 
 def add_clip(path: Path, name: str, owned: bool):
+    """Add a clip in recording order: a clip shot earlier than ones already in the project goes before them."""
     info = video_engine.probe(path)
     c = {"id": uuid.uuid4().hex[:10], "name": name, "path": str(path), "owned": owned,
-         "size": path.stat().st_size, **info, "segments": None, "whisper": None, "broll": []}
-    project["clips"].append(c)
+         "size": path.stat().st_size, **info, "segments": None, "whisper": None, "broll": [],
+         "recorded": recorded_at(name, info.get("created"))}
+    later = next((x for x in main_clips() if c["recorded"] and x.get("recorded") and x["recorded"] > c["recorded"]), None)
+    project["clips"].insert(project["clips"].index(later) if later else len(project["clips"]), c)
     return c
 
 
@@ -290,10 +314,11 @@ def join_chapter(prev, new):
 
 
 def maybe_join(new):
-    mains = [c for c in project["clips"] if not c.get("angle_of") and c is not new]
-    if settings["auto_join"] and mains and chapter_follows(mains[-1], new):
-        join_chapter(mains[-1], new)
-        return mains[-1]
+    mains = main_clips()
+    prev = mains[mains.index(new) - 1] if mains.index(new) > 0 else None  # the clip recorded just before
+    if settings["auto_join"] and prev and chapter_follows(prev, new):
+        join_chapter(prev, new)
+        return prev
     return new
 
 
@@ -513,8 +538,12 @@ def analyze():
             c["broll"].append({"start": round(max(0.0, t - 30), 2), "end": t, "interest": 1.0, "keep": True,
                                "reason": "you said a marker phrase"})
         c["broll"].sort(key=lambda w: w["start"])
+    over, dropped = editing.place_broll(project, s["broll_style"])
+    if over or dropped:
+        log(f"B-roll placed in story order: {over} shot(s) laid over the talking of their own scene"
+            + (f", {dropped} dropped for being far from anything you say" if dropped else "") + ".")
     save()
-    broll_kept = sum(w["end"] - w["start"] for c in clips for w in c["broll"] if w["keep"])
+    broll_kept = sum(w["end"] - w["start"] for c in clips for w in c["broll"] if w["keep"] and not w.get("over"))
     log(f"Kept {sum(1 for _, x in refs if x['keep'])}/{len(refs)} lines ≈ {speech_kept / 60:.1f} min of talking"
         + (f" + {broll_kept / 60:.1f} min of scenic B-roll" if broll_kept else "") + ".")
     step("Writing suggestions…", 0.92)
@@ -594,11 +623,48 @@ def program_parts():
         for c in main_clips():
             mine = [p for p in parts if p["clip"] is c]
             ff = [{"clip": c, "start": a, "end": b, "speed": sp, "effect": "none", "grade": {}, "transition": None,
-                   "ids": [], "texts": [], "voiceovers": [], "silent": True}
+                   "ids": [], "texts": [], "voiceovers": [], "overlays": [], "silent": True}
                   for a, b, sp in media_analysis.connectors([(p["start"], p["end"]) for p in mine], c["duration"])]
             out += sorted(mine + ff, key=lambda p: p["start"])
         parts = out
+    for kind, p in (("intro", parts[0] if parts else None), ("outro", parts[-1] if parts else None)):
+        card = project.get(kind)
+        if p and card and card.get("over"):  # titles over the first / last shot instead of a card of their own
+            d = min(float(card["duration"]), editing.part_duration(p))  # output seconds
+            at = p["start"] if kind == "intro" else max(p["start"], p["end"] - d * p["speed"])
+            style = "lower_third" if card.get("style") == "minimal" else "title"
+            p["texts"] = [{"text": card["title"], "style": style, "at": at, "duration": d, "card": kind},
+                          *([{"text": card["subtitle"], "style": "caption", "at": at + 0.4 * p["speed"], "y": 0.62,
+                              "x": 0.5, "duration": d - 0.4, "card": kind}]
+                            if card.get("subtitle") and style == "title" else []), *p["texts"]]
+    return spread_graphics(parts)
+
+
+def spread_graphics(parts):
+    """A graphic is anchored to a line but lasts its own length, across cuts: each part gets the slice of every
+    graphic that's on screen during it, as {..., at (source time in the part), in (seconds into the graphic),
+    duration (of the slice), full (the graphic's whole length)}."""
+    t, starts = 0.0, []
+    for p in parts:
+        starts.append(t)
+        t += editing.part_duration(p)
+    spans = [(starts[k] + (g["at"] - p["start"]) / p["speed"], g) for k, p in enumerate(parts) for g in p.get("graphics") or []]
+    for k, p in enumerate(parts):
+        p["graphics"] = []
+        a0, b0 = starts[k], starts[k] + editing.part_duration(p)
+        for g0, g in spans:
+            full = float(g.get("duration", 4))
+            a, b = max(g0, a0), min(g0 + full, b0)
+            if b - a > 0.04:
+                p["graphics"].append({**g, "at": p["start"] + (a - a0) * p["speed"], "in": round(a - g0, 3),
+                                      "duration": round(b - a, 3), "full": full})
     return parts
+
+
+def card_of(kind):
+    """The intro/outro shown as a card of its own (None when it is laid over the video)."""
+    c = project.get(kind)
+    return c if c and not c.get("over") else None
 
 
 def is_plain(parts):
@@ -656,7 +722,7 @@ def render_program(out_path, fmt, preview=False):
         if p["effect"] == "stabilise" and not preview:
             trf = video_engine.stabilise_detect(p["clip"]["path"], p["start"], p["end"],
                                                 f"trf/{editing.text_key([p['clip']['path'], p['start'], p['end']])}.trf", wd)
-        sp = production.part_spec(p, project, s, fmt, wd, font, blur, trf)
+        sp = production.part_spec(p, project, s, fmt, wd, font, blur, trf, locate, graphic_clip_for(fmt))
         if p.get("silent"):
             sp["silent"] = True
         specs.append(sp)
@@ -665,12 +731,12 @@ def render_program(out_path, fmt, preview=False):
                key=lambda w: w.get("interest", 0), default=None)
     bg_clip = next((c for c in main_clips() if best and best in c.get("broll", [])), parts[0]["clip"])
     bg = (bg_clip["path"], best["start"] if best else parts[0]["start"])
-    if project.get("intro"):
+    if card_of("intro"):
         specs.insert(0, production.card_spec(project["intro"], fmt, wd, font, bg))
         parts.insert(0, {"card": True, "clip": None, "start": 0, "end": project["intro"]["duration"], "speed": 1,
                          "voiceovers": [], "ids": []})
         specs[1]["transition"] = specs[1].get("transition") or {"xfade": "fade", "dur": 0.5}
-    if project.get("outro"):
+    if card_of("outro"):
         last = parts[-1]
         out_bg = (last["clip"]["path"], max(0.0, last["end"] - project["outro"]["duration"])) if last.get("clip") else bg
         specs.append({**production.card_spec(project["outro"], fmt, wd, font, out_bg), "transition": {"xfade": "fade", "dur": 0.6}})
@@ -705,24 +771,71 @@ def render_program(out_path, fmt, preview=False):
     return Path(out_path), parts, starts
 
 
+def chapter_clip(c, k):
+    ch = c["chapters"][k]
+    return {**c, "id": f"{c['id']}#{k}", "path": ch["path"], "duration": ch["duration"], "timecode": ch.get("timecode")}
+
+
+def nle_entries(parts):
+    """Rendered parts -> edit-list entries that carry the look: transition into each, effect, speed, grade, titles
+    (seconds from the entry's start), cutaway B-roll, and intro/outro cards."""
+    body = [p for p in parts if not p.get("card")]
+    out = []
+    for i, p in enumerate(body):
+        if p.get("silent"):  # fast-forward ride-throughs aren't footage an NLE editor wants back
+            continue
+        sp = p["speed"]
+        overlays = []
+        for o in p.get("overlays") or []:
+            oc = o["clip"]
+            if oc.get("chapters"):
+                k = next(k for k, ch in enumerate(oc["chapters"]) if ch["path"] == locate(oc, o["start"])[0])
+                oc, a = chapter_clip(oc, k), locate(oc, o["start"])[1]
+            else:
+                a = o["start"]
+            overlays.append({"clip": oc, "start": a, "end": a + o["end"] - o["start"],
+                             "at": (o["at"] - p["start"]) / sp, "dur": o["end"] - o["start"]})
+        out.append({"clip": p["clip"], "start": p["start"], "end": p["end"], "speed": sp, "effect": p["effect"],
+                    "transition": editing.transition_of(project, p, i),
+                    "grade": editing.project_grade(project, p["clip"], p.get("grade")),
+                    "texts": [{"text": t["text"], "style": t["style"], "t0": (t["at"] - p["start"]) / sp,
+                               "t1": (t["at"] - p["start"]) / sp + float(t.get("duration", 4)),
+                               **{k: t[k] for k in ("x", "y", "size") if t.get(k) is not None}} for t in p["texts"]],
+                    "overlays": overlays})
+    return out
+
+
 def expand_chapters(tl):
-    """Edit lists reference real files: split entries of joined clips at chapter boundaries."""
+    """Edit lists reference real files: split entries of joined clips at chapter boundaries, then add the
+    intro/outro cards (they have no clip of their own)."""
     out = []
     for e in tl:
         c = e["clip"]
         if not c.get("chapters"):
             out.append(e)
             continue
+        first = True
         for k, ch in enumerate(c["chapters"]):
             a, b = max(e["start"], ch["offset"]), min(e["end"], ch["offset"] + ch["duration"])
             if b - a > 0.05:
-                cc = {**c, "id": f"{c['id']}#{k}", "path": ch["path"], "duration": ch["duration"],
-                      "timecode": ch.get("timecode")}
-                out.append({**e, "clip": cc, "start": a - ch["offset"], "end": b - ch["offset"]})
+                piece = {**e, "clip": chapter_clip(c, k), "start": a - ch["offset"], "end": b - ch["offset"]}
+                if not first:  # later pieces continue the same shot: no transition, titles and B-roll shift
+                    shift = (a - e["start"]) / e["speed"]
+                    piece.update(transition=None,
+                                 texts=[{**t, "t0": t["t0"] - shift, "t1": t["t1"] - shift} for t in e.get("texts") or []],
+                                 overlays=[{**o, "at": o["at"] - shift} for o in e.get("overlays") or []])
+                out.append(piece)
+                first = False
     rec = 0.0
     for e in out:
         d = (e["end"] - e["start"]) / e["speed"]
         e["rec_start"], e["rec_end"], rec = rec, rec + d, rec + d
+    if card_of("intro"):
+        if out:
+            out[0]["transition"] = out[0].get("transition") or {"type": "crossfade", "dur": 0.5}
+        out.insert(0, {"card": project["intro"], "clip": None, "speed": 1})
+    if card_of("outro"):
+        out.append({"card": project["outro"], "clip": None, "speed": 1, "transition": {"type": "crossfade", "dur": 0.6}})
     return out
 
 
@@ -763,7 +876,7 @@ def export():
             starts.append(t)
             t += editing.part_duration(p)
     prog = production.programme(parts, starts)
-    entries = exporters.timeline([(p["clip"], p["start"], p["end"], 1) for p in parts if not p.get("card") and not p.get("silent")])
+    nle = expand_chapters(nle_entries(parts))
     chapters = []
     if s["out_youtube"]:
         step("Writing title, description and chapters…", 0.9)
@@ -777,7 +890,6 @@ def export():
             files.append(exporters.write_youtube_txt(meta, chapters, folder / f"{base}_youtube.txt"))
         except llm_agent.LLMError as e:
             log(f"Skipped YouTube metadata: {e}")
-    nle = expand_chapters(entries)
     if s["out_edl"]:
         files.append(exporters.write_edl(nle, folder / f"{base}.edl", fmt["fps"], title))
     if s["out_fcpxml"]:
@@ -866,7 +978,12 @@ async def local_only(request, call_next):
     own = {"127.0.0.1", "localhost", "[::1]"}
     if host not in own or (origin and origin.split("://")[-1].rsplit(":", 1)[0] not in own):
         return JSONResponse({"detail": "LeanCut only accepts requests from its own window."}, status_code=403)
-    return await call_next(request)
+    if not SERVER_URL and request.url.port:  # however the server was started (uvicorn CLI, tests), agents can find it
+        announce(f"http://127.0.0.1:{request.url.port}")
+    response = await call_next(request)
+    if request.url.path == "/" or request.url.path.endswith((".js", ".css", ".html")):
+        response.headers.setdefault("Cache-Control", "no-cache")  # revalidate: after an update, never yesterday's UI
+    return response
 
 
 @api.get("/api/state")
@@ -1049,6 +1166,62 @@ def move_clip(clip_id: str, body: dict):
     return {"ok": True}
 
 
+@api.post("/api/clips/sort")
+def sort_clips():
+    """Put the story clips in the order they were recorded (clips with no known time stay at the end)."""
+    mains = main_clips()
+    order = sorted(mains, key=lambda c: (c.get("recorded") is None, c.get("recorded") or "", mains.index(c)))
+    project["clips"] = order + [c for c in project["clips"] if c.get("angle_of")]
+    save()
+    return {"ok": True, "changed": order != mains}
+
+
+STRIP_W, STRIP_H, STRIP_COLS = 160, 90, 20
+
+
+@api.get("/api/clips/{clip_id}/strip")
+def clip_strip(clip_id: str):
+    """Filmstrip for the timeline: one JPEG sprite of thumbnails every `step` s (keyframes only, so it's quick)."""
+    c = clip(clip_id)
+    step_s = max(2.0, round(c["duration"] / 300, 1))
+    n = max(1, int(c["duration"] // step_s) + 1)
+    rows = -(-n // STRIP_COLS)
+    out = CACHE / f"{c['id']}.strip{step_s:g}.jpg"
+    if not out.exists():
+        tmp = out.with_suffix(".part.jpg")
+        video_engine._ffmpeg(["-y", "-skip_frame", "nokey", *video_engine.inp(c["path"]), "-an", "-vf",
+                              f"fps=1/{step_s:g},scale={STRIP_W}:{STRIP_H}:force_original_aspect_ratio=decrease,"
+                              f"pad={STRIP_W}:{STRIP_H}:-1:-1,format=yuvj420p,tile={STRIP_COLS}x{rows}",
+                              "-frames:v", "1", "-q:v", "5", str(tmp)])
+        tmp.replace(out)
+    return {"url": f"/api/clips/{c['id']}/strip.jpg?step={step_s:g}", "step": step_s, "cols": STRIP_COLS,
+            "w": STRIP_W, "h": STRIP_H, "n": n}
+
+
+@api.get("/api/clips/{clip_id}/strip.jpg")
+def clip_strip_file(clip_id: str, step: float):
+    f = CACHE / f"{clip(clip_id)['id']}.strip{step:g}.jpg"
+    if not f.exists():
+        raise HTTPException(404, "Not generated yet")
+    return FileResponse(f, media_type="image/jpeg", headers={"Cache-Control": "max-age=86400"})
+
+
+@api.get("/api/clips/{clip_id}/peaks")
+def clip_peaks(clip_id: str):
+    """Audio waveform for the timeline: peak level (0-255) every 1/20 s of the clip."""
+    c = clip(clip_id)
+    cache = CACHE / f"{c['id']}.peaks.json"
+    if not cache.exists():
+        import numpy as np
+        x = np.abs(transcriber._read_wav(wav_for(c)))
+        hop = 16000 // 20
+        n = len(x) // hop
+        pk = x[:n * hop].reshape(n, hop).max(axis=1) if n else np.zeros(0)
+        pk = np.sqrt(pk / max(float(pk.max()) if n else 1.0, 1e-6))  # sqrt: quiet talk still visible next to shouts
+        cache.write_text(json.dumps({"rate": 20, "peaks": (pk * 255).astype(int).tolist()}), encoding="utf-8")
+    return json.loads(cache.read_text(encoding="utf-8"))
+
+
 @api.post("/api/clips/{clip_id}/sync")
 def sync_clip(clip_id: str, body: dict):
     """Mark a clip as a second camera angle of another clip, lining them up by their audio."""
@@ -1099,6 +1272,9 @@ def edit_item(clip_id: str, kind: str, index: int, body: dict):
         item["keep"] = bool(body["keep"])
         if kind == "segments":
             remember_taste([{"text": item["text"], "kept": item["keep"]}])
+    if kind == "segments" and str(body.get("text") or "").strip():  # caption fix typed on the monitor/transcript
+        item["text"] = str(body["text"]).strip()[:500]
+        item.pop("words", None)  # word times no longer match; bleeps fall back to spreading words evenly
     if "start" in body or "end" in body:
         a = max(0.0, float(body.get("start", item["start"])))
         b = min(c["duration"], float(body.get("end", item["end"])))
@@ -1264,16 +1440,21 @@ def suggestion_verb(sid: str, verb: str):
     return edit_state({"done": done})
 
 
+def chapter_of(c, t):
+    path = locate(c, t)[0]
+    return next((i for i, ch in enumerate(c.get("chapters") or []) if ch["path"] == path), None)
+
+
 @api.get("/api/plan")
 def get_plan():
     """The programme for the instant preview: parts in output order with their looks, texts and transitions."""
     parts = program_parts()
-    out, t = [], float((project.get("intro") or {}).get("duration", 0) or 0)
+    out, t = [], float((card_of("intro") or {}).get("duration", 0) or 0)
     for k, p in enumerate(parts):
         c = p["clip"]
         tr = editing.transition_of(project, p, k)
         path, local = locate(c, p["start"])
-        chapter = next((i for i, ch in enumerate(c.get("chapters") or []) if ch["path"] == path), None)
+        chapter = chapter_of(c, p["start"])
         d = editing.part_duration(p)
         g = editing.project_grade(project, c, p.get("grade"))
         out.append({"clip": c["id"], "chapter": chapter, "src_start": local, "src_end": local + p["end"] - p["start"],
@@ -1281,15 +1462,28 @@ def get_plan():
                     "grade": {k2: v for k2, v in g.items() if k2 not in ("lut",)}, "transition": tr, "ids": p["ids"],
                     "silent": p.get("silent", False), "rec_start": round(t, 3), "rec_end": round(t + d, 3),
                     "texts": [{"text": x["text"], "style": x["style"], "t0": (x["at"] - p["start"]) / p["speed"],
-                               "t1": (x["at"] - p["start"]) / p["speed"] + float(x.get("duration", 4))} for x in p["texts"]],
+                               "t1": (x["at"] - p["start"]) / p["speed"] + float(x.get("duration", 4)),
+                               **{k: x[k] for k in ("x", "y", "size", "card", "item", "index") if x.get(k) is not None}}
+                              for x in p["texts"]],
+                    "graphics": [{"id": g["id"], "page": g["page"], "item": g["item"], "template": g.get("template"),
+                                  "in": g.get("in", 0), "full": g.get("full", g.get("duration", 4)),
+                                  "t0": (g["at"] - p["start"]) / p["speed"],
+                                  "t1": (g["at"] - p["start"]) / p["speed"] + float(g.get("duration", 4))}
+                                 for g in p.get("graphics") or []],
+                    "overlays": [{"id": o["id"], "clip": o["clip"]["id"], "start": o["start"], "end": o["end"],
+                                  "src_start": locate(o["clip"], o["start"])[1],
+                                  "chapter": chapter_of(o["clip"], o["start"]),
+                                  "t0": (o["at"] - p["start"]) / p["speed"],
+                                  "t1": (o["at"] - p["start"]) / p["speed"] + o["end"] - o["start"]} for o in p.get("overlays") or []],
                     "voiceovers": [{"text": v["text"], "t0": (v["at"] - p["start"]) / p["speed"]} for v in p["voiceovers"]],
-                    "captions": [{"text": h[3]["text"], "t0": max(0.0, (h[3]["start"] - p["start"]) / p["speed"]),
+                    "captions": [{"id": i, "text": h[3]["text"], "t0": max(0.0, (h[3]["start"] - p["start"]) / p["speed"]),
                                   "t1": (h[3]["end"] - p["start"]) / p["speed"]}
-                                 for h in (editing.find(project, i) for i in p["ids"]) if h and h[1] == "segments"]
+                                 for i, h in ((i, editing.find(project, i)) for i in p["ids"]) if h and h[1] == "segments"]
                                 if project.get("captions") else []})
         t += d
-    return {"parts": out, "duration": round(t + float((project.get("outro") or {}).get("duration", 0) or 0), 3),
-            "intro": project.get("intro"), "outro": project.get("outro"), "captions": project.get("captions")}
+    return {"parts": out, "duration": round(t + float((card_of("outro") or {}).get("duration", 0) or 0), 3),
+            "intro": card_of("intro"), "outro": card_of("outro"), "captions": project.get("captions"),
+            "titles_over": {k: project[k] for k in ("intro", "outro") if project.get(k) and project[k].get("over")}}
 
 
 @api.post("/api/preview")
@@ -1470,11 +1664,410 @@ def reveal_output():
     return {"ok": True}
 
 
+
+# ---------------------------------------------------------------- agents: tools, built-in local agent, coding agents
+
+def announce(url):
+    """Tell agents' MCP servers / the CLI where this LeanCut listens (server.json in the data folder)."""
+    global SERVER_URL
+    SERVER_URL = url
+    f = WORK / "server.json"
+    try:
+        _write_json(f, {"url": url, "pid": os.getpid(), "version": VERSION})
+    except OSError:
+        return
+
+    def remove():  # on a clean exit, unless another LeanCut has taken over the file
+        try:
+            if json.loads(f.read_text(encoding="utf-8")).get("pid") == os.getpid():
+                f.unlink()
+        except (OSError, ValueError):
+            pass
+    atexit.register(remove)
+
+
+def look_format():
+    c = (main_clips() or [{"fps": 30}])[0]
+    return {"width": 1280, "height": 720, "fps": c.get("fps", 30)}
+
+
+def chrome():
+    """The graphics module, with a headless browser to draw pages: an installed Chrome/Edge/Brave/Chromium, else
+    Chrome for Testing's headless shell, downloaded once (about 110 MB) into the models folder."""
+    gm = _optional("graphics")
+    if not gm:
+        raise RuntimeError("Motion graphics need graphics.py.")
+    if not gm.find_browser():
+        log("No Chrome, Edge, Brave or Chromium found: downloading a headless Chrome (about 110 MB, once)…")
+        os.environ["LEANCUT_CHROME"] = str(gm.ensure_browser(MODELS, log))
+    return gm
+
+
+def graphic_page(g):
+    return project_dir() / g["page"]
+
+
+def graphic_clip_for(fmt):
+    """Render a graphic page to a video with alpha (cached) for the export."""
+    if not _optional("graphics"):
+        return None
+
+    def render(g, d):
+        page = graphic_page(g)
+        if not page.exists():
+            raise RuntimeError(f"Graphic page {g['page']} is missing from the project folder.")
+        out = CACHE / "graphics"  # a folder: the file is named by its content, so changed pages re-render
+        out.mkdir(parents=True, exist_ok=True)
+        full = float(g.get("full", d))  # the whole graphic once; each part overlays its slice of it
+        log(f"Drawing graphic {g['id']} ({Path(g['page']).stem}, {full:.1f} s)…")
+        return chrome().render_clip(page.as_uri(), out, fmt["fps"], full, 1920, 1080, on_progress=lambda f: check_cancel())
+    return render
+
+
+def programme_still(t, width=960):
+    """(JPEG, what's there) of the finished video at programme time t, through the export's own filters."""
+    fmt = look_format()
+    wd, font = production.prepare(CACHE / "render")
+    parts = program_parts()
+    t0 = float((card_of("intro") or {}).get("duration", 0) or 0)
+    if t < t0:
+        best = max((w for c in main_clips() for w in c.get("broll") or [] if w.get("keep")), key=lambda w: w.get("interest", 0), default=None)
+        c = next((c for c in main_clips() if best and best in c.get("broll", [])), parts[0]["clip"])
+        sp = production.card_spec(project["intro"], fmt, wd, font, (c["path"], best["start"] if best else parts[0]["start"]))
+        return video_engine.still_of(sp, t, width, str(wd)), "intro card"
+    for p in parts:
+        d = editing.part_duration(p)
+        if t < t0 + d:
+            lt = t - t0
+            sp = production.part_spec(p, project, settings, fmt, wd, font, "", None, locate)
+            jpeg = video_engine.still_of(sp, lt, width, str(wd))
+            for g in p.get("graphics") or []:  # one still of each graphic on screen, laid over the frame
+                gt = lt - (g["at"] - p["start"]) / p["speed"]
+                if _optional("graphics") and 0 <= gt < float(g["duration"]) and graphic_page(g).exists():
+                    gt += g.get("in", 0)
+                    gm = chrome()
+                    png = CACHE / "look-graphic.png"
+                    png.write_bytes(gm.still(graphic_page(g).as_uri(), gt, 1920, 1080))
+                    base = CACHE / "look-base.jpg"
+                    base.write_bytes(jpeg)
+                    jpeg = video_engine._ffmpeg(["-y", "-i", str(base), "-i", str(png), "-filter_complex",
+                                                 f"[1:v]scale={width}:-2[g];[0:v][g]overlay", "-f", "mjpeg", "-"],
+                                                binary=True).stdout
+            what = "; ".join(filter(None, [f"part {parts.index(p) + 1}: {', '.join(p['ids']) or 'ride-through'}",
+                                           ", ".join(f"graphic {g['id']}" for g in p.get("graphics") or []
+                                                     if 0 <= lt - (g["at"] - p["start"]) / p["speed"] < g["duration"])]))
+            return jpeg, what
+        t0 += d
+    raise ValueError(f"t is past the end of the video ({t0:.1f} s)")
+
+
+def contact_sheet(times, width=320):
+    """Quick strip of source frames at programme times (no looks or graphics), 4 per row."""
+    plan = get_plan()
+    tiles = []
+    for t in times:
+        p = next((p for p in plan["parts"] if p["rec_start"] <= t < p["rec_end"]), None)
+        if p:
+            c = clip(p["clip"])
+            tiles.append(base64.b64decode(frame_b64(c, p["start"] + (t - p["rec_start"]) * p["speed"], width)))
+    if not tiles:
+        raise ValueError("no frames in that range")
+    d = CACHE / "sheet"
+    d.mkdir(parents=True, exist_ok=True)
+    for k, jpg in enumerate(tiles):
+        (d / f"{k:03d}.jpg").write_bytes(jpg)
+    cols = min(4, len(tiles))
+    rows = -(-len(tiles) // cols)
+    return video_engine._ffmpeg(["-y", "-framerate", "1", "-i", str(d / "%03d.jpg"), "-vf",
+                                 f"scale={width}:-2,pad={width}:ih,tile={cols}x{rows}:padding=4", "-frames:v", "1",
+                                 "-f", "mjpeg", "-"], binary=True).stdout
+
+
+def check_graphic(path):
+    return chrome().check(Path(path).as_uri(), None, 1920, 1080)
+
+
+def telemetry_series(ci):
+    """GoPro GPS of clip ci as series for data graphics: {t, speed_kmh, alt, lat, lon, highlights} (or None)."""
+    tel = _optional("telemetry")
+    c = project["clips"][ci]
+    if not tel:
+        return None
+    out = {"t": [], "speed_kmh": [], "alt": [], "lat": [], "lon": []}
+    for ch in c.get("chapters") or [{"path": c["path"], "offset": 0}]:
+        if not tel.has_gpmf(ch["path"]):
+            continue
+        data = tel.read_gopro(ch["path"])
+        speed = data.get("speed") or []
+        k = 0
+        for t, lat, lon, alt in data.get("gps") or []:
+            while k + 1 < len(speed) and speed[k + 1][0] <= t:
+                k += 1
+            out["t"].append(round(t + ch["offset"], 2))
+            out["lat"].append(lat)
+            out["lon"].append(lon)
+            out["alt"].append(round(alt, 1))
+            out["speed_kmh"].append(round(speed[k][1] * 3.6, 1) if speed else 0.0)
+    if not out["t"]:
+        return None
+    step_ = max(1, len(out["t"]) // 2000)  # plenty for a gauge or a line, small enough to embed in a page
+    out = {k: v[::step_] for k, v in out.items()}
+    out["highlights"] = clip_telemetry(c)["highlights"]
+    return out
+
+
+def search_hits(query):
+    vision = _optional("vision")
+    if not vision:
+        raise RuntimeError("Search needs the vision module.")
+    hits = []
+    for c in main_clips():
+        for ch in c.get("chapters") or [{"path": c["path"], "offset": 0}]:
+            index = vision.embed_frames(ch["path"], CACHE / f"{c['id']}.{editing.text_key(ch['path'])}.clip.npz", MODELS)
+            hits += [{"clip": c["id"], "name": c["name"], "t": round(t + ch["offset"], 2), "score": round(float(sc), 3)}
+                     for t, sc in vision.search(query, index, MODELS)]
+    return sorted(hits, key=lambda h: -h["score"])[:12]
+
+
+def mcp_command():
+    mcp = _optional("mcp_server")
+    if mcp and hasattr(mcp, "mcp_command"):
+        return mcp.mcp_command()
+    return [sys.executable, "--mcp"] if getattr(sys, "frozen", False) else [sys.executable, str(ROOT / "mcp_server.py")]
+
+
+AGENT_PROMPT = """You are LeanCut's editing agent. You edit the creator's vlog with tools; every change is validated and
+undoable. Work in small steps: get_edit first, act, then look at the result before you say you're done. Never export
+unless asked. Keep replies short: say what you changed and what the creator should look at.
+
+""" + agent_tools.MANUAL
+
+CODING_AGENTS = {  # name -> (label, executable names)
+    "codex": ("Codex", ("codex",)), "codex_local": ("Codex with a local gpt-oss model", ("codex",)),
+    "claude": ("Claude Code", ("claude",)), "gemini": ("Gemini CLI", ("gemini",)), "opencode": ("OpenCode", ("opencode",)),
+}
+
+
+def find_cli(names):
+    """Coding agents' CLIs, also where installers put them but a desktop app's PATH doesn't look."""
+    home = Path.home()
+    extra = [home / ".local/bin", home / ".npm-global/bin", home / ".bun/bin", home / ".opencode/bin",
+             Path("/opt/homebrew/bin"), Path("/usr/local/bin"), home / "AppData/Roaming/npm", home / ".claude/local"]
+    for n in names:
+        found = shutil.which(n) or next((str(d / x) for d in extra for x in (n, n + ".cmd", n + ".exe")
+                                         if (d / x).is_file()), None)
+        if found:
+            return found
+    return None
+
+
+def run_local_agent(message):
+    s = settings
+    caps = llm_agent.capabilities(s["provider"], s["base_url"], s["model"])
+    if not caps["tools"]:
+        raise RuntimeError(f"{s['model']} can't call tools. Pick a model that can (e.g. qwen2.5:14b, llama3.1:8b, "
+                           "qwen3:8b) in Settings › AI models, or use the quick assistant.")
+    steps = []
+
+    def event(kind, text):
+        steps.append({"kind": kind, "text": text[:400]})
+        log(("💬 " if kind == "say" else "🔧 " if kind == "tool" else "   ↳ ") + text[:300])
+
+    def tool(name, args):
+        res = agent_tools.call(sys.modules[__name__], name, args)
+        pics = [x for x in res["content"] if x["type"] == "image"]
+        if pics and not caps["vision"] and s["vision_model"]:  # a text-only model gets the vision model's eyes
+            try:
+                desc = llm_agent.look_at(s["provider"], s["base_url"], s["vision_model"], pics[0]["data"])[0]
+                res["content"].append({"type": "text", "text": f"What's in the frame: {desc}"})
+            except llm_agent.LLMError:
+                pass
+        return res
+
+    history = [{"role": m["role"], "content": m["text"]} for m in project["chat"][-8:] if m["role"] in ("user", "assistant")]
+    step("Agent is working…", 0.1)
+    reply, _ = llm_agent.agent_loop(s["provider"], s["base_url"], s["model"], AGENT_PROMPT,
+                                    history + [{"role": "user", "content": message}], agent_tools.tool_list(), tool,
+                                    event, check_cancel=check_cancel, vision=caps["vision"])
+    return reply, steps
+
+
+def run_coding_agent(kind, message):
+    label, names = CODING_AGENTS[kind]
+    exe = find_cli(names)
+    if not exe:
+        raise RuntimeError(f"{label} isn't installed (or LeanCut can't find it). Install it, sign in once in a "
+                           "terminal, then try again. See Settings › Agents.")
+    cmd = mcp_command()
+    folder = project_dir()
+    (folder / "graphics").mkdir(exist_ok=True)
+    prompt = (f"You are editing the LeanCut video project in this folder through the `leancut` MCP tools (motion "
+              f"graphics pages go in ./graphics). Call get_edit first and follow the LeanCut manual (MCP prompt "
+              f"'leancut'). Use look to check visual changes. Don't export unless asked.\n\nTask: {message}")
+    last = folder / ".agent-last.txt"
+    if kind.startswith("codex"):
+        args = [exe, "exec", "--skip-git-repo-check", "-C", str(folder), "-s", "workspace-write", "-o", str(last),
+                "-c", f"mcp_servers.leancut.command={json.dumps(cmd[0])}",
+                "-c", f"mcp_servers.leancut.args={json.dumps(cmd[1:])}",
+                "-c", "mcp_servers.leancut.tool_timeout_sec=900"]
+        if kind == "codex_local":  # Codex's local mode is made for OpenAI's open gpt-oss models
+            local = "lmstudio" if settings["provider"] == "lmstudio" else "ollama"
+            names = llm_agent.list_models(settings["provider"], settings["base_url"])
+            model = next((m for m in names if "gpt-oss" in m), None)
+            if not model:
+                raise RuntimeError("Codex with a local model needs OpenAI's open gpt-oss model: run `ollama pull "
+                                   "gpt-oss:20b` (13 GB; needs about 16 GB of free memory), then try again. Other "
+                                   "local models can't drive Codex's tools; use “Agent with tools” for them.")
+            args += ["--oss", "--local-provider", local, "-m", model, "--color", "never"]
+        else:
+            args += ["--color", "never"]
+        args.append(prompt)
+    elif kind == "claude":
+        cfg = json.dumps({"mcpServers": {"leancut": {"command": cmd[0], "args": cmd[1:]}}})
+        args = [exe, "-p", prompt, "--mcp-config", cfg, "--allowedTools", "mcp__leancut", "Read", "Write", "Edit",
+                "--output-format", "stream-json", "--verbose"]
+    elif kind == "gemini":
+        (folder / ".gemini").mkdir(exist_ok=True)
+        _write_json(folder / ".gemini" / "settings.json", {"mcpServers": {"leancut": {"command": cmd[0], "args": cmd[1:], "trust": True}}})
+        args = [exe, "-p", prompt, "--yolo"]
+    else:  # opencode
+        _write_json(folder / "opencode.json", {"$schema": "https://opencode.ai/config.json",
+                                                "mcp": {"leancut": {"type": "local", "command": cmd, "enabled": True}}})
+        args = [exe, "run", prompt]
+    log(f"Starting {label} in {folder}")
+    step(f"{label} is working…", 0.1)
+    env = {**os.environ, "LEANCUT_URL": SERVER_URL} if SERVER_URL else None  # this LeanCut, not another one
+    proc = subprocess.Popen(args, cwd=folder, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
+                            text=True, encoding="utf-8", errors="replace", env=env)
+    final, tail = "", []
+    try:
+        for line in proc.stdout:
+            check_cancel()
+            line = line.rstrip()
+            if kind == "claude" and line.startswith("{"):
+                try:
+                    ev = json.loads(line)
+                except json.JSONDecodeError:
+                    ev = {}
+                if ev.get("type") == "result":
+                    final = ev.get("result") or final
+                for c in (ev.get("message") or {}).get("content") or [] if ev.get("type") == "assistant" else []:
+                    if c.get("type") == "text":
+                        log("💬 " + c["text"][:300])
+                    elif c.get("type") == "tool_use":
+                        log(f"🔧 {c.get('name')} {json.dumps(c.get('input'))[:200]}")
+                continue
+            line = re.sub(r"\x1b\[[0-9;]*m", "", line)  # terminal colours
+            if line:
+                log(line[:300])
+                tail = (tail + [line])[-20:]
+    except Cancelled:
+        proc.kill()
+        raise
+    finally:
+        proc.wait()
+    if last.exists():
+        final = last.read_text(encoding="utf-8").strip()
+        last.unlink()
+    if proc.returncode and not final:
+        raise RuntimeError(f"{label} stopped with an error: " + " ".join(tail[-3:])[:400])
+    return final or "\n".join(tail[-6:]), []
+
+
+@api.get("/api/agent/manual")
+def agent_manual():
+    return {"text": agent_tools.MANUAL}
+
+
+@api.get("/api/agent/tools")
+def agent_tool_list():
+    return {"tools": agent_tools.tool_list()}
+
+
+@api.post("/api/agent/call")
+def agent_call(body: dict):
+    return agent_tools.call(sys.modules[__name__], str(body.get("name", "")), body.get("arguments") or {})
+
+
+@api.get("/api/agent/agents")
+def agent_choices():
+    cli = _optional("leancut_cli")
+    snippets = cli.connect_snippets(mcp_command()) if cli else {}
+    return {"agents": [{"id": "assistant", "label": "Quick assistant (your local model)", "ready": True},
+                       {"id": "local", "label": "Agent with tools (your local model)", "ready": bool(settings["model"])},
+                       *({"id": k, "label": lab, "ready": bool(find_cli(n))} for k, (lab, n) in CODING_AGENTS.items())],
+            "mcp_command": mcp_command(), "connect": snippets}
+
+
+@api.post("/api/agent/run")
+def agent_run(body: dict):
+    msg, kind = str(body.get("message", "")).strip(), str(body.get("agent", "local"))
+    if not msg:
+        raise HTTPException(400, "Type what you'd like the agent to do.")
+    if kind != "local" and kind not in CODING_AGENTS:
+        raise HTTPException(400, f"Unknown agent '{kind}'.")
+    label = "Agent" if kind == "local" else CODING_AGENTS[kind][0]
+    project["chat"].append({"role": "user", "text": msg, "agent": kind, "ts": time.time()})
+    save()
+
+    def run():
+        try:
+            reply, steps = run_local_agent(msg) if kind == "local" else run_coding_agent(kind, msg)
+        except Cancelled:
+            project["chat"].append({"role": "assistant", "text": "Stopped.", "agent": kind, "ts": time.time()})
+            save()
+            raise
+        except Exception as e:
+            project["chat"].append({"role": "assistant", "text": "", "errors": [str(e)], "agent": kind, "ts": time.time()})
+            save()
+            raise
+        project["chat"] = (project["chat"] + [{"role": "assistant", "text": reply or "Done.", "steps": steps,
+                                               "agent": kind, "ts": time.time()}])[-60:]
+        save()
+        return {"agent": True}
+    return start_job(f"{label}: {msg[:40]}", run)
+
+
+# --- motion graphics: templates and page files (served with the preview host for the monitor)
+
+@api.get("/api/graphics/templates")
+def graphic_templates():
+    gm = _optional("graphics")
+    return {"templates": gm.list_templates() if gm else [], "available": bool(gm)}
+
+
+@api.post("/api/graphics/add")
+def graphic_add(body: dict):
+    r = agent_tools.call(sys.modules[__name__], "add_graphic", body)
+    if r["isError"]:
+        raise HTTPException(400, r["content"][0]["text"])
+    return edit_state({"done": [r["content"][0]["text"]]})
+
+
+@api.get("/api/graphics/page/{pid}/{path:path}")
+def graphic_file(pid: str, path: str):
+    """A project's graphics files for the live preview; pages get the preview host script injected."""
+    from fastapi.responses import HTMLResponse
+    if pid != project["id"]:
+        raise HTTPException(404, "Not the open project")
+    root = (project_dir() / "graphics").resolve()
+    f = (root / path).resolve()
+    if root not in f.parents or not f.is_file():
+        raise HTTPException(404, "Not found")
+    if f.suffix.lower() == ".html":
+        gm = _optional("graphics")
+        html = f.read_text(encoding="utf-8")
+        return HTMLResponse(gm.inject_host(html, "/graphics-host.js") if gm else html,
+                            headers={"Cache-Control": "no-store"})
+    return FileResponse(f, headers={"Cache-Control": "no-store"})
+
+
 api.mount("/", StaticFiles(directory=RESOURCES / "static", html=True), name="static")
 
 if __name__ == "__main__":
     import uvicorn
 
     url = "http://127.0.0.1:8765"
+    announce(url)
     threading.Timer(1.2, lambda: webbrowser.open(url)).start()
     uvicorn.run(api, host="127.0.0.1", port=8765, log_level="warning")

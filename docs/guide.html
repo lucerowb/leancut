@@ -59,6 +59,8 @@ dl.trouble dd { margin: 4px 0 0; }
       <li><a href="#privacy-blur">Privacy blur</a></li>
       <li><a href="#stabilise">Stabilisation</a></li>
       <li><a href="#chapters">Camera chapters</a></li>
+      <li><a href="#agents">Agents</a></li>
+      <li><a href="#graphics">Motion graphics</a></li>
       <li><a href="#telemetry">Telemetry</a></li>
       <li><a href="#bleep">Profanity bleep</a></li>
       <li><a href="#enhance">Voice enhancement</a></li>
@@ -161,7 +163,7 @@ python app.py                    # or: browser UI at http://127.0.0.1:8765</code
     <p>Click <b>② Export</b>. When it finishes, the Log lists every file it wrote; click <b>Open output folder</b> to see them. You can press <b>Cancel</b> at any time. Finished work is kept, and the next export reuses every part that was already rendered: a 4K re-export that took 9 minutes the first time took 28 seconds the second.</p>
 
     <h2 id="editor">The editor</h2>
-    <p>The <b>Editor</b> tab has your media on the left, the monitor in the middle, the assistant on the right, the timeline below them, and five tabs at the bottom: <b>Inspector</b>, <b>Look &amp; titles</b>, <b>Transcript</b>, <b>Search footage</b> and <b>Log</b>.</p>
+    <p>The <b>Editor</b> tab has your media on the left, the monitor in the middle, the assistant on the right, the timeline below them, and six tabs at the bottom: <b>Inspector</b>, <b>Look &amp; titles</b>, <b>Graphics</b>, <b>Transcript</b>, <b>Search footage</b> and <b>Log</b>.</p>
     <h3>Monitor</h3>
     <p>The monitor has two modes.</p>
     <ul>
@@ -169,26 +171,39 @@ python app.py                    # or: browser UI at http://127.0.0.1:8765</code
       <li><b>Rendered</b> plays an exact render. Click <b>Render preview</b> in the toolbar: LeanCut renders the whole edit at 540p with everything baked in, including voice-overs, music, bleeps and loudness, then the <b>Rendered</b> button turns on. Render again after you change something; unchanged parts are reused. Stabilisation and voice enhancement are left out of the preview to keep it quick; they're applied at export.</li>
     </ul>
     <h3>Timeline</h3>
-    <p>The timeline shows the finished video, not your source clips. <b>Picture</b> holds the intro and outro cards and every part in output order (amber parts are B-roll, ⏩ parts are fast-forward ride-throughs, and small badges show effects and speed changes). <b>Titles</b> shows text overlays and <b>Voice</b> shows voice-over lines. A ruler shows output time, the blue playhead shows where you are, and the <b>Zoom</b> slider stretches it.</p>
-    <p>Click a part to select it and open it in the Inspector. Click an empty spot to move the playhead. Click the intro or outro card to edit it in <b>Look &amp; titles</b>.</p>
+    <p>The timeline shows the finished video, not your source clips, on six tracks: <b>Graphics</b> (animated graphics), <b>B-roll</b> (scenery laid over the talking), <b>Video</b> (every part in output order, with thumbnails; amber parts are B-roll shots of their own, ⏩ parts are fast-forward ride-throughs, badges show effects and speed), <b>Audio</b> (the waveform), <b>Titles</b> and <b>Voice-over</b>.</p>
+    <ul>
+      <li><b>Select:</b> click a part; <kbd>⇧</kbd>-click selects a range, <kbd>⌘</kbd>-click (Ctrl-click) adds or removes one. With several selected, the Inspector changes them all at once: cut, stabilise, effect, transition, colour or a title on each.</li>
+      <li><b>Trim:</b> drag either edge of a part. With <b>Snap</b> on, the edge lands between words, never in the middle of one.</li>
+      <li><b>Split:</b> put the playhead where you want it and press <kbd>S</kbd> (or <b>✂ Split</b>). The two halves can then have different looks.</li>
+      <li><b>Scrub:</b> drag along the ruler or an empty spot. <b>Zoom</b> with the slider, <kbd>+</kbd>/<kbd>−</kbd>, ⌘-scroll or a pinch; scroll to move along.</li>
+      <li><b>Move:</b> drag a title, a graphic or a B-roll cutaway; drag the end of a title or graphic to change its length.</li>
+    </ul>
     <div class="table-wrap">
       <table>
         <thead><tr><th>Key</th><th>What it does</th></tr></thead>
         <tbody>
-          <tr><td><kbd>Space</kbd></td><td>Play or pause</td></tr>
+          <tr><td><kbd>Space</kbd> / <kbd>K</kbd></td><td>Play or pause / pause</td></tr>
+          <tr><td><kbd>J</kbd> / <kbd>L</kbd></td><td>Back 5 seconds / play</td></tr>
+          <tr><td><kbd>,</kbd> <kbd>.</kbd></td><td>One frame back or forward</td></tr>
           <tr><td><kbd>←</kbd> <kbd>→</kbd></td><td>Select the previous or next part</td></tr>
-          <tr><td><kbd>Delete</kbd></td><td>Cut the selected part (Backspace works too)</td></tr>
-          <tr><td><kbd>⌘Z</kbd></td><td>Undo (Ctrl+Z on Windows and Linux)</td></tr>
-          <tr><td><kbd>⇧⌘Z</kbd></td><td>Redo (Ctrl+Shift+Z)</td></tr>
+          <tr><td><kbd>S</kbd></td><td>Split at the playhead</td></tr>
+          <tr><td><kbd>T</kbd></td><td>Add text on the video at the playhead</td></tr>
+          <tr><td><kbd>Delete</kbd></td><td>Cut the selected parts, or the selected words in the transcript</td></tr>
+          <tr><td><kbd>⌘A</kbd> / <kbd>Esc</kbd></td><td>Select every part / clear the selection</td></tr>
+          <tr><td><kbd>⌘Z</kbd> / <kbd>⇧⌘Z</kbd></td><td>Undo / redo (Ctrl on Windows and Linux)</td></tr>
         </tbody>
       </table>
     </div>
+    <h3>Text on the video</h3>
+    <p>Press <b>T+ Text</b> (or <kbd>T</kbd>) to put text on the video at the playhead. Drag it anywhere on the monitor, scroll over it to make it bigger or smaller, and double-click it to type. It lasts 4 seconds; drag its end on the Titles track to change that. Double-click a burned-in caption on the monitor to correct its words. In <b>Look &amp; titles</b>, tick <b>Show them over the first and last shots</b> to lay the intro and outro titles over your footage instead of on a card of their own.</p>
     <p>Keys don't fire while you're typing in a field.</p>
     <h3>Inspector</h3>
     <p>Shows the selected part: its ids, where it comes from in the source clip, and what's said in it. From here you can play from the part, cut it, trim its start and end (in source seconds), set its effect, the transition into it and its length, give it its own colour preset, add or remove titles (text, style, seconds into the part, duration), add a voice-over line in your voice, and apply the suggestions that concern it.</p>
     <h3>Look &amp; titles</h3>
     <p>Settings for the whole video: the cut style used at every cut and its length, colour (auto colour, a preset, five sliders and a LUT), the intro and outro cards, burned-in captions, face and plate blur, the B-roll share and the music volume. See <a href="#looks">Looks</a>. The B-roll share is used when you run the auto-edit again.</p>
     <h3>Transcript</h3>
+    <p><b>Cut by editing words:</b> select words in the transcript (drag across them) and press <kbd>Delete</kbd> or <b>Cut selected words</b>. Just those words are cut, with a clean jump cut. Lines transcribed before v0.3 have no word timings, so their words are spread evenly over the line; run the auto-edit again for exact ones.</p>
     <p>The source view: one lane per clip with <b style="color:var(--keep)">kept lines</b> in green, <b style="color:var(--paint)">scenic B-roll</b> in amber and cut speech in grey, and the full transcript below with each line's score and reason, for example <span class="score">★1 earlier take of the next line</span>. Tick or untick any line or B-roll window, drag the handles at either end of a kept block to trim it, and click a line or block to play it from the source clip (press ▶ to return to the edit). A <b>?</b> marks lines the AI is unsure about.</p>
     <h3>Undo</h3>
     <p>Every edit can be undone: ticks and trims, Inspector and Look changes, an assistant request (as one step) and each applied suggestion. LeanCut keeps the last 40 steps per project until you quit.</p>
@@ -220,6 +235,21 @@ python app.py                    # or: browser UI at http://127.0.0.1:8765</code
       <li><b>Stabilise the shaky shots</b> in clips that move a lot between frames.</li>
     </ul>
     <p>The language model adds up to 10 of its own, marked <b>AI</b>: titles where the place or day changes, transitions at scene changes, lines to cut or bring back. Suggestions that duplicate another or would change nothing are dropped. Click <b>Apply</b> or <b>Dismiss</b> on each, <b>Apply all</b> to take every open one (each is its own undo step), or <b>Suggest again</b> for a fresh list. Click a part id on a suggestion to jump to it. The Inspector shows the suggestions for the selected part.</p>
+
+    <h2 id="agents">Agents</h2>
+    <p>For bigger jobs than a single instruction, let an agent work through the edit step by step. Pick one under <b>Who edits</b> in the Assistant panel:</p>
+    <ul>
+      <li><b>Quick assistant</b>: one request, one set of actions (as above).</li>
+      <li><b>Agent with tools</b> runs on your own local model. It reads the edit, makes changes, adds or writes animated graphics, and <b>looks</b> at frames of the finished video to check its work, over several steps you can watch in the chat. It needs a model that can call tools: <code>qwen2.5:14b</code>, <code>qwen2.5:7b</code>, <code>llama3.1:8b</code> or <code>qwen3:8b</code>, for example. If the model can't see pictures, your <a href="#looks">vision model</a> (such as <code>gemma3:4b</code>) describes each frame for it.</li>
+      <li><b>Codex</b>, <b>Claude Code</b>, <b>Gemini CLI</b> or <b>OpenCode</b>, if installed and signed in: LeanCut starts it in the project folder with LeanCut's tools connected. These use their own service and account. <b>Codex with a local gpt-oss model</b> runs Codex on your machine instead; it needs <code>ollama pull gpt-oss:20b</code> (13 GB).</li>
+    </ul>
+    <p>Every change an agent makes goes through the same checked actions as the Inspector, so it can't break the project, and <b>Undo</b> takes each step back. <b>Cancel</b> stops it. Small local models are capable but not perfect: they sometimes pick the wrong line, so watch the result.</p>
+    <h3>Connect any coding agent</h3>
+    <p>LeanCut is also an MCP server, so you can work from your coding agent's own window. <b>Settings › Agents</b> shows the exact line or config for Claude Code, Codex, Cursor, OpenCode, Gemini CLI and Qwen Code; from the packaged app the server command is <code>LeanCut --mcp</code>. Keep LeanCut open while the agent works: the agent finds it automatically. A terminal agent can also use the CLI, for example <code>LeanCut --cli look 12.5</code> to save a frame. Details are in <a href="https://github.com/lucerowb/leancut/blob/main/CONNECT_AGENTS.md">CONNECT_AGENTS.md</a>.</p>
+
+    <h2 id="graphics">Motion graphics</h2>
+    <p>Animated graphics sit on the <b>Graphics</b> track over your footage: titles, lower thirds, chapter cards, location pins, end screens, quotes, a “time jump” clock, stat cards, and a <b>speedometer</b> and <b>route map</b> drawn from a GoPro's GPS. Open the <b>Graphics</b> tab, pick one, fill it in and click <b>Add at the playhead</b>. It plays live on the monitor and runs on across cuts; drag it on the track to move it, or its end to change its length.</p>
+    <p>Each graphic is a small web page in the project's <code>graphics</code> folder that draws any moment of itself, the same page format as <a href="https://github.com/openfilm/openfilm">OpenFilm</a>. So you, or an agent, can write new ones: ask the agent for “an animated altitude chart for the climb” and it writes the page, checks it (errors, missing fonts, text off the frame, a picture that changes when it shouldn't) and places it. For export, LeanCut draws every frame with your installed Chrome, Edge, Brave or Chromium; if none is installed it downloads a headless Chrome (about 110 MB) the first time. Graphics stay in the MP4: edit lists don't carry them.</p>
 
     <h2 id="options">Options reference</h2>
     <h3>Toolbar</h3>
@@ -451,7 +481,7 @@ python voice_server.py --voice my_voice.wav      # --port 8880 by default</code>
       </table>
     </div>
     <p>A line spoken during a highlight gets +1 on its score, like a loud moment, and B-roll during a highlight ranks higher. B-roll from stopped and motorway stretches is left out. Clips without telemetry, or without a GPS lock, are edited as before.</p>
-    <div class="note"><b>Not yet tested on a real GoPro file.</b> The parser and the detection were built and tested against synthetic GoPro telemetry. It uses the GPS track only. If it misbehaves on your footage, please <a href="https://github.com/lucerowb/leancut/issues/new/choose">open an issue</a>.</div>
+    <div class="note"><b>Checked on real GoPro files.</b> The parser matches GoPro's own reference parser exactly on HERO5 to HERO13 files (HERO11 and newer write the newer GPS9 format, which is supported), and readings with a poor GPS fix are dropped. The riding thresholds haven't been checked on a real motorcycle ride yet: the only openly licensed GPS ride we found is a bicycle. If a highlight looks wrong on your footage, please <a href="https://github.com/lucerowb/leancut/issues/new/choose">open an issue</a>.</div>
 
     <h2 id="bleep">Profanity bleep</h2>
     <p>Turn on <b>Settings › Audio › Bleep profanity</b>. At export and in the rendered preview, swear words in kept lines are muted and covered with a 1 kHz tone, and in burned-in captions they're masked (“f***”). LeanCut knows common English swear words; add others, in any language, under <b>Extra words to bleep</b>.</p>
@@ -487,9 +517,9 @@ ct2-transformers-converter --model &lt;org/whisper-model&gt; --output_dir whispe
   --copy_files tokenizer.json preprocessor_config.json --quantization float16</code></pre>
 
     <h2 id="languages">Non-English footage</h2>
-    <p>Whisper's accuracy varies a lot by language. For widely spoken languages, set <b>Spoken language</b> to that language. For languages Whisper handles poorly, or for speech that mixes a language with English, set it to <b>English</b>. Whisper then writes a rough English version of what was said, with timestamps that still match the speech. That is the best input a local model can judge.</p>
-    <div class="note"><b>Real example.</b> Nepali–English moto-vlog footage: <code>small</code> on auto-detect produced random characters from four different scripts, <code>large-v3-turbo</code> set to Nepali was still garbled and 11× slower, and <code>large-v3-turbo</code> set to English produced readable lines in 33 seconds per 2 minutes of audio.</div>
-    <p>With Auto-detect on, the Log shows the language Whisper detected and how sure it was. If that is wrong, set the language yourself. A fine-tuned model for your language (see above) is the other option.</p>
+    <p>Whisper's accuracy varies a lot by language. For widely spoken languages, set <b>Spoken language</b> to that language. For languages Whisper handles poorly, a model fine-tuned for that language is far better than the stock ones: set <b>Spoken language</b> to it and paste the model's Hugging Face name (or a local folder) into <b>Settings › Models on disk › Custom Whisper model</b>. Models must be in CTranslate2 format; <code>tools/convert_whisper.py</code> converts a Hugging Face Whisper fine-tune.</p>
+    <div class="note"><b>Nepali (tested on real moto-vlog footage).</b> Stock Whisper doesn't work: <code>large-v3-turbo</code> set to English writes fluent English that is <i>mostly made up</i> (a 15-second sentence about food came out as “Thank you.”), auto-detect wanders into other scripts, and turbo can't even recognise Nepali as a language. <code>Dragneel/whisper-medium-nepali-openslr-ct2</code> (Apache-2.0, 0.8 GB) with <b>Spoken language: Nepali</b> writes plausible Nepali in Devanagari, at about 0.6× real time on an M-series Mac (a 22-minute ride takes about 35 minutes). Your language model then judges the Nepali text directly; larger models handle that better. For Hindi, <code>bjollans/whisper-large-v3-vaani-hindi-ct2</code> and <code>digikar/vasista22-whisper-hindi-large-v2-ct2-int8</code> (both Apache-2.0) are ready to use; avoid models marked non-commercial (CC-BY-NC).</div>
+    <p>Burned-in captions in Devanagari need a title font that has those letters; on most systems the default bold font doesn't, so check the preview. With Auto-detect on, the Log shows the language Whisper detected and how sure it was. A mode that switches between Nepali or Hindi and English line by line is being worked on and isn't in this version.</p>
 
     <h2 id="export">Export</h2>
     <p>Every file starts with the name pattern from Settings (by default, the project name).</p>
@@ -645,7 +675,7 @@ python build.py             # .app + .dmg on macOS, .zip on Windows, .tar.gz on 
     <p>CI runs the tests on macOS, Windows and Linux for every push and pull request. Pushing a <code>v*</code> tag builds all three apps and attaches them to a GitHub Release; when signing secrets are configured, the macOS app is signed and notarized and the Windows exe is signed. No certificates are configured yet, so current releases are unsigned.</p>
 
     <h2 id="roadmap">Roadmap</h2>
-    <p>Version 0.3 shipped everything on the previous roadmap: camera chapter joining, J-cuts and crossfades, learning your taste, profanity bleep, telemetry highlights, neural voice enhancement, face and plate blur, stabilisation with Gyroflow, footage search, subject-tracking Shorts, in-app updates and a Linux build. What we want to do next, such as carrying looks and transitions into the edit lists, multi-select editing and signed builds, is listed under <a href="index.html#next">What's next</a> on the home page.</p>
+    <p>Version 0.4 shipped most of the previous roadmap: effects, transitions and titles in the edit lists, multi-select editing, cutting by editing words, telemetry checked against real GoPro files, GPU acceleration for the vision models, and in-app updates tested on Windows and Linux by CI, plus agents, animated graphics and the new timeline. Still open: a licence-plate model for every country (the best one we tested finds far more plates on Nepali streets, but its licence isn't clear enough to ship), and signed builds, which need certificates. The full list is under <a href="index.html#next">What's next</a> on the home page.</p>
 
     <h2 id="faq">FAQ</h2>
     <h3>Does LeanCut upload my footage?</h3>

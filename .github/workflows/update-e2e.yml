@@ -1,0 +1,107 @@
+# End-to-end test of the in-app updater on each OS, without the GUI: install an older published release the way a
+# user would, then let tools/update_e2e.py (this repo's updates.py) download the newer release, stage it, run the
+# detached helper and check the swap, the cleanup and the relaunch. Logs are uploaded as an artifact per OS.
+#
+# Run: Actions › Update e2e › Run workflow (pick the tags), or push a branch named ci/<anything>.
+name: Update e2e
+
+on:
+  workflow_dispatch:
+    inputs:
+      from_tag:
+        description: Installed (old) release
+        default: v0.2.0
+      to_tag:
+        description: Release to update to
+        default: v0.3.0
+  push:
+    branches: ["ci/**"]
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: windows-latest, asset: LeanCut-Windows.zip }
+          - { os: ubuntu-22.04, asset: LeanCut-Linux-x64.tar.gz }
+          - { os: macos-14, asset: LeanCut-macOS.dmg }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    env:
+      FROM: ${{ inputs.from_tag || 'v0.2.0' }}
+      TO: ${{ inputs.to_tag || 'v0.3.0' }}
+      ASSET: ${{ matrix.asset }}
+      LOGS: ${{ github.workspace }}/update-e2e-logs
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Download the old release
+        run: |
+          mkdir -p "$RUNNER_TEMP/old" "$LOGS"
+          base="https://github.com/lucerowb/leancut/releases/download"
+          if ! curl -fsSL -o "$RUNNER_TEMP/old/$ASSET" "$base/$FROM/$ASSET"; then
+            # The first Linux build shipped in v0.3.0: fall back to installing the target release as the "old" one
+            echo "::warning::$FROM has no $ASSET; installing $TO as the old version (the swap is still tested)"
+            curl -fsSL -o "$RUNNER_TEMP/old/$ASSET" "$base/$TO/$ASSET"
+          fi
+          ls -l "$RUNNER_TEMP/old"
+
+      - name: Install it (macOS, drag to an Applications folder)
+        if: runner.os == 'macOS'
+        run: |
+          hdiutil attach -nobrowse -readonly -mountpoint "$RUNNER_TEMP/dmg" "$RUNNER_TEMP/old/$ASSET"
+          mkdir -p "$RUNNER_TEMP/Applications"
+          ditto "$RUNNER_TEMP/dmg/LeanCut.app" "$RUNNER_TEMP/Applications/LeanCut.app"
+          hdiutil detach "$RUNNER_TEMP/dmg"
+          echo "BUNDLE=$RUNNER_TEMP/Applications/LeanCut.app" >> "$GITHUB_ENV"
+      - name: Install it (Windows, Extract All to a folder)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          # On purpose: a space, an apostrophe, [ ] (PowerShell wildcards) and a non-ASCII letter in the folder name
+          $apps = Join-Path $env:RUNNER_TEMP "Zoë's Apps [e2e]"
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          [IO.Compression.ZipFile]::ExtractToDirectory("$env:RUNNER_TEMP\old\$env:ASSET", $apps)
+          "BUNDLE=$apps\LeanCut" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+      - name: Install it (Linux, install.sh with a throwaway HOME)
+        if: runner.os == 'Linux'
+        run: |
+          # Qt WebEngine's system libraries (as in release.yml) so the old and the relaunched app can open a window
+          sudo apt-get update && sudo apt-get install -y libegl1 libgl1 libxkbcommon-x11-0 libxcb-cursor0 \
+            libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-shape0 \
+            libxcb-xinerama0 libxcb-xkb1 libnss3 libxcomposite1 libxdamage1 libxrandr2 libxtst6 libasound2 \
+            libdbus-1-3 libfontconfig1 xvfb
+          tar -xzf "$RUNNER_TEMP/old/$ASSET" -C "$RUNNER_TEMP/old"
+          mkdir -p "$RUNNER_TEMP/home"
+          HOME="$RUNNER_TEMP/home" sh "$RUNNER_TEMP/old/LeanCut/install.sh"
+          echo "HOME=$RUNNER_TEMP/home" >> "$GITHUB_ENV"
+          echo "BUNDLE=$RUNNER_TEMP/home/.local/share/LeanCut/app" >> "$GITHUB_ENV"
+
+      - name: Update it with this repo's updates.py
+        run: |
+          run=(python tools/update_e2e.py --bundle "$BUNDLE" --tag "$TO" --work "$RUNNER_TEMP/dl" --logs "$LOGS" --with-old-app)
+          if [ "$RUNNER_OS" = Linux ]; then run=(xvfb-run -a "${run[@]}"); fi
+          "${run[@]}"
+
+      - name: Collect app logs
+        if: always()
+        run: |
+          for f in "$HOME/Library/Application Support/LeanCut/leancut.log" "$APPDATA/LeanCut/leancut.log" \
+                   "$HOME/.local/share/LeanCut/leancut.log"; do
+            [ -f "$f" ] && cp "$f" "$LOGS/app-leancut.log" || true
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: update-e2e-${{ runner.os }}
+          path: update-e2e-logs

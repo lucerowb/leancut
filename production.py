@@ -70,9 +70,10 @@ def mask(text, extra=()):
     return re.sub(r"[\w']+", lambda m: m[0][0] + "*" * (len(m[0]) - 1) if is_profane(m[0], extra) else m[0], text)
 
 
-def part_spec(part, project, settings, fmt, workdir, font, blur="", trf=None):
+def part_spec(part, project, settings, fmt, workdir, font, blur="", trf=None, locate=None, graphic_clip=None):
     """Render spec for one part, filters in order: privacy blur → stabilise → speed → scale → grade → effect →
-    texts → burned-in captions → fps."""
+    [cutaway B-roll laid over] → texts → burned-in captions → fps. locate(clip, t) -> (file, local t) for B-roll
+    from camera files joined as chapters."""
     c, w, h, fps = part["clip"], fmt["width"], fmt["height"], fmt["fps"]
     speed, dur = part["speed"], editing.part_duration(part)
     vf = [x for x in (blur, trf and f"vidstabtransform=input={trf}:smoothing=20:zoom=1,unsharp=5:5:0.6") if x]
@@ -83,11 +84,28 @@ def part_spec(part, project, settings, fmt, workdir, font, blur="", trf=None):
     g = editing.project_grade(project, c, part.get("grade"))
     g["lut"] = lut_file(workdir, g.get("lut"))
     vf += [x for x in (editing.grade_filter(g), eff_v if speed == 1 else "") if x]
+    overlays = []
+    for o in part.get("overlays") or []:  # cutaways: the B-roll clip's own grade, over the talking
+        og = editing.project_grade(project, o["clip"])
+        og["lut"] = lut_file(workdir, og.get("lut"))
+        src, local = locate(o["clip"], o["start"]) if locate else (o["clip"]["path"], o["start"])
+        overlays.append({"src": src, "start": round(local, 3), "end": round(local + o["end"] - o["start"], 3),
+                         "at": round(max(0.0, (o["at"] - part["start"]) / speed), 3),
+                         "vf": ",".join(x for x in (base_vf(fmt), editing.grade_filter(og), f"fps={fps}") if x)})
+    for g in part.get("graphics") or []:  # animated pages, rendered to video with alpha (graphic_clip -> path)
+        at = max(0.0, (g["at"] - part["start"]) / speed)
+        d = min(float(g.get("duration", 4)), dur - at)
+        if d > 0.05 and graphic_clip:
+            gin = float(g.get("in", 0))  # this part shows the graphic from `in` seconds into it
+            overlays.append({"src": str(graphic_clip(g, d)), "start": gin, "end": round(gin + d, 3), "at": round(at, 3),
+                             "vf": f"scale={w}:{h},fps={fps}", "fade": False})
+    look = len(vf)
     if font:
         for t in part["texts"]:
             t0 = max(0.0, (t["at"] - part["start"]) / speed)
             vf.append(editing.text_filter(text_file(workdir, t["text"]), font, t["style"], t0,
-                                          min(dur, t0 + float(t.get("duration", 4))), w, h))
+                                          min(dur, t0 + float(t.get("duration", 4))), w, h,
+                                          t.get("x"), t.get("y"), t.get("size")))
         if project.get("captions"):
             words = settings.get("profanity_words", "").split(",") if settings.get("bleep") else ()
             for iid in part["ids"]:
@@ -101,8 +119,11 @@ def part_spec(part, project, settings, fmt, workdir, font, blur="", trf=None):
     vf += [f"fps={fps}", "format=yuv420p"]
     af = [eff_a] if eff_a else []
     af += ["afade=t=in:d=0.03", f"afade=t=out:st={max(0.0, dur - 0.03):.3f}:d=0.03"]
-    return {"src": c["path"], "start": part["start"], "end": part["end"], "vf": ",".join(x for x in vf if x),
+    spec = {"src": c["path"], "start": part["start"], "end": part["end"], "vf": ",".join(x for x in vf if x),
             "af": ",".join(af)}
+    if overlays:  # the B-roll goes between the look and the text, so titles and captions stay on top
+        spec.update(vf=",".join(x for x in vf[:look] if x), top=",".join(x for x in vf[look:] if x), overlays=overlays)
+    return spec
 
 
 def card_spec(card, fmt, workdir, font, bg):

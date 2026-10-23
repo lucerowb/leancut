@@ -48,13 +48,16 @@
       <input id="pathInput" placeholder="…or paste a file path" aria-label="Local file path">
       <button>Add</button>
     </form>
+    <button id="sortClips" class="hidden small" title="Your clips aren't in the order they were filmed">Sort by time recorded</button>
     <ul id="clips"></ul>
   </section>
 
   <section class="panel monitor-panel">
     <div class="monitor" id="monitor">
       <video id="pv" playsinline preload="auto"></video>
+      <video id="pv2" class="cutaway hidden" playsinline muted preload="auto"></video>
       <div class="ov vignette" id="ovVignette"></div>
+      <div class="ov gfx" id="ovGfx"></div>
       <div class="ov texts" id="ovTexts"></div>
       <div class="ov card hidden" id="ovCard"><b id="cardTitle"></b><span id="cardSub"></span></div>
       <div class="ov dim" id="ovDim"></div>
@@ -63,6 +66,7 @@
     <div class="transport">
       <button id="playBtn" aria-label="Play">▶</button>
       <span id="tc" class="tc">0:00.0 / 0:00.0</span>
+      <button id="addTextBtn" title="Add text on the video at the playhead (T). Drag it to place it, double-click to edit, scroll to resize.">T+ Text</button>
       <span class="grow"></span>
       <span class="seg-toggle" role="group" aria-label="Preview mode">
         <button id="modeInstant" class="on">Instant</button><button id="modeRendered" disabled title="Render a preview first">Rendered</button>
@@ -76,6 +80,10 @@
       <button class="t2" data-pane="sugg">Suggestions <span id="suggCount" class="pill">0</span></button>
     </div>
     <div class="pane" id="pane-chat">
+      <label class="agent-pick">Who edits
+        <select id="agentPick" aria-label="Which agent edits"></select>
+        <button id="agentHelp" class="small" title="Connect Claude Code, Codex and other agents">Connect…</button>
+      </label>
       <div id="chatLog" class="chatlog" aria-live="polite">
         <p class="muted small">Tell me what to change, in your own words. For example:</p>
       </div>
@@ -101,25 +109,37 @@
   </section>
 
   <section class="panel tl-panel">
-    <div class="row between">
+    <div class="row tl-tools">
       <h2>Timeline</h2>
+      <button id="splitBtn" title="Split the part at the playhead (S)">✂ Split</button>
+      <button id="cutBtn" title="Cut the selected parts (Delete)">Cut</button>
+      <button id="snapBtn" class="on" title="Snap to part edges and word boundaries">Snap</button>
+      <span id="selInfo" class="muted small"></span>
+      <span class="grow"></span>
       <span id="summary" class="muted small"></span>
-      <label class="inline small">Zoom <input type="range" id="zoom" min="1" max="12" value="1" step="0.5"></label>
+      <button id="zoomOut" aria-label="Zoom out">−</button>
+      <input type="range" id="zoom" min="0" max="100" value="0" step="1" aria-label="Zoom">
+      <button id="zoomIn" aria-label="Zoom in">+</button>
+      <button id="zoomFit">Fit</button>
     </div>
     <div class="timeline" id="timeline" tabindex="0" aria-label="Programme timeline">
       <div class="ruler" id="ruler"></div>
-      <div class="track" data-track="V"><span class="tname">Picture</span><div class="lane" id="laneV"></div></div>
+      <div class="track" data-track="G"><span class="tname">Graphics</span><div class="lane" id="laneG"></div></div>
+      <div class="track" data-track="B"><span class="tname">B-roll</span><div class="lane" id="laneB"></div></div>
+      <div class="track" data-track="V"><span class="tname">Video</span><div class="lane" id="laneV"></div></div>
+      <div class="track" data-track="A"><span class="tname">Audio</span><div class="lane" id="laneA"></div></div>
       <div class="track" data-track="T"><span class="tname">Titles</span><div class="lane" id="laneT"></div></div>
-      <div class="track" data-track="A"><span class="tname">Voice</span><div class="lane" id="laneA"></div></div>
+      <div class="track" data-track="VO"><span class="tname">Voice-over</span><div class="lane" id="laneVO"></div></div>
       <div class="playhead" id="playhead"></div>
     </div>
-    <p class="muted small">Click a part to edit it · Space play/pause · ←/→ previous/next part · Delete cuts the selected part · ⌘Z undo</p>
+    <p class="muted small">Click to select · ⇧/⌘-click for several · drag edges to trim · drag the ruler to scrub · ⌘-scroll or pinch to zoom · Space play/pause · S split · T text · Delete cut · ⌘Z undo</p>
   </section>
 
   <section class="panel bottom">
     <div class="tabs2">
       <button class="t2 on" data-pane="insp">Inspector</button>
       <button class="t2" data-pane="look">Look &amp; titles</button>
+      <button class="t2" data-pane="gfx">Graphics</button>
       <button class="t2" data-pane="trans">Transcript</button>
       <button class="t2" data-pane="search">Search footage</button>
       <button class="t2" data-pane="log">Log</button>
@@ -148,6 +168,7 @@
           <legend>Intro &amp; outro</legend>
           <label>Intro title <input id="introTitle" placeholder="e.g. Mountain Pass"></label>
           <label>Intro subtitle <input id="introSub" placeholder="e.g. Day 1 · 1,200 km to go"></label>
+          <label class="check"><input type="checkbox" id="introOver"> Show them over the first and last shots (no separate card)</label>
           <label>Style <select id="introStyle"><option value="bold">Bold</option><option value="minimal">Minimal</option><option value="cinematic">Cinematic (letterbox)</option></select></label>
           <label>Outro title <input id="outroTitle" placeholder="e.g. Thanks for riding along"></label>
           <label>Outro subtitle <input id="outroSub" placeholder="e.g. Subscribe for day 2"></label>
@@ -162,8 +183,16 @@
         </fieldset>
       </div>
     </div>
+    <div class="pane hidden" id="pane-gfx">
+      <p class="muted small">Animated graphics are web pages laid over your video (the same page format as OpenFilm). Pick one, fill it in and add it at the playhead, or ask an agent to make one from scratch.</p>
+      <div id="gfxTemplates" class="gfxgrid"></div>
+      <div id="gfxForm" class="hidden"></div>
+      <h3>In this video</h3>
+      <ul id="gfxList" class="items"></ul>
+    </div>
     <div class="pane hidden" id="pane-trans">
-      <p class="muted small"><span class="key k"></span> kept line · <span class="key b"></span> scenic B-roll · <span class="key"></span> cut. Drag edges to trim; tick to keep.</p>
+      <p class="muted small row wrap"><span><span class="key k"></span> kept line · <span class="key b"></span> scenic B-roll · <span class="key"></span> cut. Drag edges to trim; tick to keep. Select words and press Delete to cut just those words.</span>
+        <button id="cutWordsBtn" class="small">Cut selected words</button></p>
       <div id="tracks"></div>
       <div id="transcript"></div>
     </div>
@@ -318,12 +347,27 @@
     <h2>Rider AI</h2>
     <label class="check"><input type="checkbox" data-setting="broll"> Keep scenic B-roll from silent stretches</label>
     <label>B-roll share of the video <span class="row"><input type="range" min="0" max="40" step="5" data-setting="broll_share" id="broll_share"><output id="brollShareOut"></output></span></label>
+    <label>B-roll placement
+      <select data-setting="broll_style">
+        <option value="auto">Over the talking of the same scene when it fits, else between lines</option>
+        <option value="cutaway">Over the talking only</option>
+        <option value="insert">Between lines, as shots of their own</option>
+      </select>
+    </label>
     <label class="check"><input type="checkbox" data-setting="moments"> Boost loud moments (shouts, laughs, revs)</label>
     <label class="check"><input type="checkbox" data-setting="telemetry"> Use GoPro GPS telemetry (braking, twisties, summits; skip motorways)</label>
     <label class="check"><input type="checkbox" data-setting="connectors"> Fast-forward ride-throughs over long dropped stretches</label>
     <label class="check"><input type="checkbox" data-setting="auto_join"> Join camera chapter files automatically</label>
     <label>Spoken markers <input data-setting="markers" placeholder="clip that, mark this"></label>
     <label>Blur <select data-setting="privacy_kinds"><option value="face,plate">Faces and licence plates</option><option value="face">Faces only</option><option value="plate">Licence plates only</option></select></label>
+  </section>
+
+  <section class="panel" id="agentsPanel">
+    <h2>Agents</h2>
+    <p class="muted small">Let a coding agent edit with you. LeanCut gives it the same tools the built-in agent has, over MCP: read the edit, change it with validated (undoable) actions, write animated graphics, and look at frames of the finished video.</p>
+    <ul id="agentList" class="plain"></ul>
+    <p class="small">MCP server command: <code id="mcpCmd"></code></p>
+    <div id="connectList"></div>
   </section>
 
   <section class="panel">

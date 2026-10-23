@@ -183,13 +183,15 @@ td .mono { white-space: nowrap; }
     <h2 class="lean">Everything a long ride needs</h2>
     <p class="intro">Talking-head editors throw away everything without words. LeanCut knows a ride is more than talk.</p>
     <ul class="features">
+      <li><span class="tag">Agents</span><b>Agents that edit with you</b><span>An agent with tools on your own local model, or Claude Code, Codex and other coding agents connected over MCP. They read the edit, change it with undoable actions, and look at frames of the finished video to check their work.</span></li>
+      <li><span class="tag">Graphics</span><b>Animated graphics</b><span>Titles, lower thirds, chapter cards, location pins, end screens, and a speedometer and route map from your GoPro's GPS. Each is a web page that draws any moment, in OpenFilm's page format, so an agent can write new ones.</span></li>
       <li><span class="tag">Edit</span><b>AI assistant</b><span>Type “make it about 8 minutes” or “give it a warm cinematic look”. Your local model turns it into checked edit actions, and one undo takes them all back.</span></li>
       <li><span class="tag">Edit</span><b>Suggestions for every part</b><span>Unsure lines, a missing intro title, J-cuts, a punch-in on long talking, slow motion on the big reaction. Apply or dismiss each one.</span></li>
-      <li><span class="tag">Edit</span><b>Timeline &amp; instant preview</b><span>Picture, Titles and Voice tracks, an inspector, keyboard shortcuts and undo. Plays at once from your files; <b>Render preview</b> makes an exact 540p version.</span></li>
+      <li><span class="tag">Edit</span><b>Timeline &amp; instant preview</b><span>Filmstrip and waveform, trimming that snaps between words, split, multi-select, text you place right on the video, and cutting words straight from the transcript. Plays at once from your files; <b>Render preview</b> makes an exact 540p version.</span></li>
       <li><span class="tag">Look</span><b>Effects, transitions &amp; colour</b><span>Punch-ins, slow motion, 15 transitions, auto colour, presets, sliders and LUTs, titles, intro and outro cards, burned-in captions.</span></li>
       <li><span class="tag">Voice</span><b>Voice-overs in your voice</b><span>Type a line and hear it in your own cloned voice, mixed in with the ride ducked underneath. Runs locally, and only with your consent.</span></li>
       <li><span class="tag">AI</span><b>Decision engine</b><span>Scores come from the model's token probabilities, with a confidence for every line. Unsure lines become your call, and it learns from your overrides.</span></li>
-      <li><span class="tag">Rides</span><b>Scenic B-roll, judged</b><span>Silent stretches are scored for movement, colour and exposure; an optional local vision model looks at the best ones.</span></li>
+      <li><span class="tag">Rides</span><b>Scenic B-roll, in story order</b><span>Silent stretches are scored for movement, colour and exposure and laid over the talking of their own scene, in the order you filmed them. An optional local vision model looks at the best ones.</span></li>
       <li><span class="tag">Rides</span><b>GoPro telemetry</b><span>The GPS track finds hard braking, twisties, top speed and summits, and keeps motorways and stops out of the B-roll.</span></li>
       <li><span class="tag">Rides</span><b>Say “clip that”</b><span>Shout a marker phrase mid-ride and the 30 seconds before it stay in. Shouts, laughs and revs lift what was said there.</span></li>
       <li><span class="tag">Privacy</span><b>Face &amp; plate blur</b><span>Two small on-device detectors blur faces and licence plates in the video before you publish it.</span></li>
@@ -207,7 +209,7 @@ td .mono { white-space: nowrap; }
     <div class="eyebrow">See it</div>
     <h2 class="lean">One window, from raw ride to upload</h2>
     <div class="shots">
-      <figure><img src="assets/screens/editor.png" width="1440" height="1180" loading="lazy" alt="LeanCut editor: media list, program monitor, AI assistant, a timeline with Picture, Titles and Voice tracks, and the inspector"><figcaption>The editor: monitor, assistant, timeline and inspector.</figcaption></figure>
+      <figure><img src="assets/screens/editor.png" width="1440" height="1180" loading="lazy" alt="LeanCut editor: media list, program monitor with an animated location graphic, the assistant with its agent picker, a timeline with Graphics, B-roll, Video (filmstrip) and Audio (waveform) tracks, and the inspector"><figcaption>The editor: an animated graphic on the monitor, the agent picker, and the timeline with filmstrip and waveform.</figcaption></figure>
       <figure><img src="assets/screens/settings.png" width="1440" height="1140" loading="lazy" alt="LeanCut settings: updates, AI models, export destination and formats, video encoder, audio, voice and rider AI"><figcaption>Settings: AI models, export, audio, your voice, rider AI and updates.</figcaption></figure>
       <figure><img src="assets/screens/projects.png" width="1440" height="1180" loading="lazy" alt="LeanCut projects list with an overnight batch panel"><figcaption>Projects and the overnight batch queue.</figcaption></figure>
     </div>
@@ -238,7 +240,7 @@ FCM: DROP FRAME
 
 <b>002</b>  AX  AA/V  C  21:01:33;26 21:01:46;12 <em>01:00:05;15 01:00:18;01</em>
 * FROM CLIP NAME: ride_01.MP4</pre>
-      <p class="muted">Source times follow each camera's own timecode (DJI and GoPro write time of day), so clips land on the right frames. FCPXML adds chapter markers and a synced second angle. Looks, titles and transitions are baked into the MP4 only.</p>
+      <p class="muted">Source times follow each camera's own timecode (DJI and GoPro write time of day), so clips land on the right frames. Dissolves, speed changes, titles, intro cards and B-roll cutaways come along; FCPXML adds chapter markers and a synced second angle. Colour grades and animated graphics stay in the MP4.</p>
     </div>
   </div>
 </section>
@@ -267,11 +269,11 @@ FCM: DROP FRAME
   <div class="wrap">
     <div class="eyebrow">What's next</div>
     <h2 class="lean">Where LeanCut is heading</h2>
-    <p class="intro">Version 0.3 shipped the whole previous roadmap. These are the honest gaps we want to close next.</p>
+    <p class="intro">Version 0.4 added agents, animated graphics and a real timeline, and closed most of the last list. These are the honest gaps we want to close next.</p>
     <div class="roadmap">
-      <div><h3>Editing</h3><ul><li>Effects, transitions and titles in the EDL and FCPXML, not only in the MP4</li><li>Select several parts on the timeline and edit them at once</li><li>Cut by editing words in the transcript</li></ul></div>
-      <div><h3>For riders</h3><ul><li>A licence-plate model that works on more countries' plates</li><li>Telemetry checked against real GoPro rides</li><li>Whisper models tuned for Nepali, Hindi and more</li></ul></div>
-      <div><h3>Platform</h3><ul><li>Signed, notarized builds once we have certificates</li><li>GPU acceleration for the vision models on Windows and Linux</li><li>In-app updates tested on Windows and Linux</li></ul></div>
+      <div><h3>Editing</h3><ul><li>Drag parts to reorder the story on the timeline</li><li>Animated graphics and colour grades in the FCPXML, not only in the MP4</li><li>Graphics templates for vertical Shorts</li></ul></div>
+      <div><h3>For riders</h3><ul><li>A licence-plate model that finds plates from every country, with a licence we can ship</li><li>Riding highlights tuned on real motorcycle rides</li><li>Better Nepali and Hindi transcription</li></ul></div>
+      <div><h3>Platform</h3><ul><li>Signed, notarized builds once we have certificates</li><li>Agents and graphics tested on Windows and Linux machines</li><li>Graphics templates you can share between projects</li></ul></div>
     </div>
     <p style="margin-top:28px"><a href="guide.html#roadmap">More detail in the guide →</a></p>
   </div>

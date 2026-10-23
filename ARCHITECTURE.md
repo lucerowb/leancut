@@ -32,7 +32,7 @@ FFmpeg for media, faster-whisper for speech, onnxruntime for the small vision an
 | Media | FFmpeg via `imageio-ffmpeg` | One bundled GPL build per OS (x264, x265, freetype for titles, vid.stab), preferred over a system ffmpeg so features match everywhere (`LEANCUT_FFMPEG` overrides); probing parses `ffmpeg -i`, so no ffprobe |
 | Speech | faster-whisper (CTranslate2) + Silero VAD | Fast on CPU, GPU when available, VAD built in |
 | Judgement and editing | Any Ollama / OpenAI-compatible model | User's choice; nothing leaves the machine by default |
-| Vision, enhancement | ONNX models on onnxruntime (CPU) | Small downloads, no PyTorch in the packaged app |
+| Vision, enhancement | ONNX models on onnxruntime (`onnx_runtime.session`: CUDA, DirectML in the Windows build, CoreML where measured faster, else CPU, with a CPU fallback; `LEANCUT_ORT_PROVIDER` overrides) | Small downloads, no PyTorch in the packaged app |
 | Voice cloning | Chatterbox-Turbo (PyTorch), optional | Too big to bundle; installed from source or run as a separate server |
 | Packaging | PyInstaller | `.app`/`.dmg` on macOS, folder/`.zip` on Windows, folder/`.tar.gz` on Linux |
 
@@ -55,11 +55,18 @@ FFmpeg for media, faster-whisper for speech, onnxruntime for the small vision an
    timestamps and never enforces the budget; code does both.
 9. B-roll: 5 s windows in silent gaps, ranked by interest (telemetry highlights +0.3, stopped and motorway stretches
    0), optionally re-rated by the visual judge, and picked globally until the B-roll share is used.
-10. Suggestions: rule-based ones (`editing.heuristic_suggestions`) plus the LLM's, minus duplicates and no-ops.
+10. Placement (`editing.place_broll`): a kept window more than 75 s from any kept line of its clip shows another
+    place and time, so it's unticked; the rest are laid over the nearest long-enough kept line of their scene as a
+    cutaway (`over` + `offset`, one per line) or, with style "insert", kept as their own part in source order.
+    Clips are added in recording order (`app.recorded_at`: a time stamp in the file name, else the creation time).
+11. Suggestions: rule-based ones (`editing.heuristic_suggestions`) plus the LLM's, minus duplicates and no-ops.
 
 **Edit.** The edit is the project itself: transcript lines and B-roll windows, addressed as `c<clip>.s<n>` and
 `c<clip>.b<n>`, each with `keep`, `start`/`end`, and optionally `effect`, `transition` (into it), `grade`, `texts`
-and `voiceovers`. Project-wide: `grade` (auto, preset, manual, LUT), `cut_style`, `intro`, `outro`, `captions`,
+(with `x`/`y`/`size` when placed on the monitor), `voiceovers`, `graphics` (pages in the project's `graphics/`
+folder) and, for B-roll, `over` (the line it's laid over). `split` and `cut_words` take a range out of an item: the
+piece after the cut is appended as a new item, so ids never shift, and the cut edges are hard (`cut_in`/`cut_out`:
+no padding, no merging back). Project-wide: `grade` (auto, preset, manual, LUT), `cut_style`, `intro`, `outro`, `captions`,
 `privacy_blur`, `broll_share`, `music_volume`.
 
 Every change goes through `editing.apply_action`, whatever its source: the Inspector and Look panel, a suggestion, or
@@ -71,11 +78,14 @@ project, in memory only). Keep/cut changes made by hand are appended to `taste.j
 **Export** (`app.export`, `app.render_program`):
 
 1. `editing.build_parts` turns kept items into ordered render parts. Adjacent kept items of a clip merge (0.15 s
-   padding, gaps under 0.6 s) unless their look differs or the later one has its own transition. Optional
-   ride-through fast-forwards are inserted between parts.
+   padding, gaps under 0.6 s) unless their look differs, the later one has its own transition, or a split / word
+   cut separates them; padding never replays frames the previous part showed. Cutaway B-roll rides on the part of
+   its line as an overlay. Optional ride-through fast-forwards are inserted between parts, and
+   `app.spread_graphics` gives every part the slice of each graphic on screen during it, so graphics run on across
+   cuts.
 2. `production.part_spec` builds each part's filter chain, in order: privacy blur → stabilisation (vid.stab pass 2)
-   → speed → scale/pad → grade (curves, colour balance, temperature, eq, LUT, vignette) → effect → titles →
-   burned-in captions → fps. Intro and outro are `card_spec`s: a title over darkened, softened footage.
+   → speed → scale/pad → grade (curves, colour balance, temperature, eq, LUT, vignette) → effect → overlays
+   (cutaway B-roll with a short fade; motion graphics as `.mov` with alpha) → titles → burned-in captions → fps. Intro and outro are `card_spec`s: a title over darkened, softened footage.
 3. `video_engine.render_parts` renders in two stages. Stage 1 renders every part to its own file under
    `cache/parts/` (`cache/preview-parts/` for the 540p preview), keyed by source, range, filters and codec, so an
    unchanged part is never rendered twice. Stage 2 joins them: a lossless concat when every cut is a hard cut,
@@ -84,8 +94,11 @@ project, in memory only). Keep/cut changes made by hand are appended to `taste.j
 4. `video_engine.finish_audio`: optional neural enhancement (replaces the programme audio), denoise, bleeps,
    voice-overs mixed in with the programme ducked under them, a music bed with sidechain ducking, then two-pass
    `loudnorm` to −14 LUFS. Video is stream-copied.
-5. `exporters.timeline` places every part on the output timeline; joined camera chapters are split back into their
-   files (`app.expand_chapters`). EDL, FCPXML, OTIO, SRT, chapters and the YouTube text are derived from it.
+5. `app.nle_entries` turns the parts into edit-list entries that carry the transition into each, effect, speed,
+   grade, titles and cutaways; joined camera chapters are split back into their files and intro/outro cards are
+   added (`app.expand_chapters`). EDL (dissolves, wipes, `M2` speed, the rest as comments), FCPXML (transitions,
+   Basic Title clips, `timeMap`, connected B-roll) and OTIO (transitions, time warps, an overlay track, titles as
+   markers) are written from them; SRT, chapters and the YouTube text from the programme timeline.
    Thumbnails and Shorts come from `media_analysis`; Shorts are cropped along `vision.subject_track`.
 
 Fast mode (stream copy through `video_engine.render`) is only used when nothing needs baking in.
@@ -93,6 +106,38 @@ Fast mode (stream copy through `video_engine.render`) is only used when nothing 
 **Working folder.** Titles, fonts, LUTs and vid.stab data are written to `cache/render/` (`texts/`, `fonts/`,
 `luts/`, `trf/`) and FFmpeg runs with that folder as its working directory, so filter strings only ever contain
 short relative paths: no escaping of Windows drive letters, quotes or colons in user file names.
+
+## Agents and motion graphics
+
+**Tools.** `agent_tools.py` defines the tools an agent edits with: `get_edit`, `apply_actions` (the same validated
+vocabulary as the assistant), `undo`/`redo`, `look` (one frame of the finished video, rendered through the export's
+own filters by `video_engine.still_of`, with graphics composited), `look_sheet`, `list_templates`, `add_graphic`,
+`update_graphic`, `write_page`, `read_page`, `check_page`, `get_telemetry`, `search_footage`, `job_status`,
+`render_preview` and `export`. Results are MCP-shaped (`{content: [text | image], isError}`); a failing tool returns
+its reason instead of raising. The app serves them at `GET /api/agent/tools`, `POST /api/agent/call` and the manual at
+`GET /api/agent/manual`.
+
+**Built-in agent.** `llm_agent.agent_loop` runs a tool-calling conversation on the user's Ollama (`/api/chat` with
+`tools`, streamed) or OpenAI-compatible server, up to 16 steps, as a cancellable job whose steps stream into the chat.
+`llm_agent.capabilities` reads Ollama's `/api/show`: a model without `tools` is refused with a clear message; a model
+without `vision` gets the visual judge's description of each `look` frame instead of the picture.
+
+**Coding agents.** `mcp_server.py` is a stdio MCP server (stdlib only) that proxies the tools to the running app,
+found through `server.json` in the data folder (written by `app.announce`, removed on exit) or `LEANCUT_URL`. The
+packaged app runs it as `LeanCut --mcp` and the CLI as `LeanCut --cli …` (dispatched in `desktop.py` before anything
+else loads). `leancut_cli.connect_snippets` writes each agent's config. `app.run_coding_agent` starts Codex
+(`codex exec`, MCP passed with `-c`; `--oss` with a local gpt-oss model), Claude Code (`claude -p --mcp-config`),
+Gemini CLI or OpenCode in the project folder and streams their output into the chat.
+
+**Motion graphics.** A graphic is a page in the project's `graphics/` folder following OpenFilm's contract:
+`window.film = {frame(t), duration?, ready?}`, the same `t` always drawing the same picture. `graphics.py` drives an
+installed Chrome / Edge / Brave / Chromium (or a downloaded Chrome for Testing headless shell) over the DevTools
+protocol: `render_clip` captures frames with a transparent background and encodes a qtrle `.mov` with alpha, cached
+by the page's content; `still` draws one frame; `check` reports page errors, failed fonts, text off the frame and
+non-deterministic frames (two shuffled passes compared). Templates in `graphics_templates/` are filled with
+HTML-escaped fields (and JSON data for the telemetry ones). In the editor, pages run in sandboxed iframes
+(`sandbox="allow-scripts"`, no same origin, so a page can't call LeanCut's API) driven by `static/graphics-host.js`
+over `postMessage`.
 
 ## AI engines
 
@@ -177,9 +222,16 @@ source time in EDL/FCPXML/OTIO is `clip start timecode + offset`, computed in fr
 - LLM output is untrusted: it can only produce actions from the fixed vocabulary, which are validated before they
   touch the project. It never chooses timestamps for scoring, and never names files to read or write (a LUT path must
   be an existing `.cube`/`.3dl` file).
+- Agents (built-in or connected over MCP) act only through the tools: edits are the validated actions above, and
+  the files they can write are pages in the project's `graphics/` folder (names restricted, no path separators).
+  Coding agents LeanCut starts run in the project folder with their own sandbox settings (Codex `workspace-write`;
+  Claude Code limited to LeanCut's tools and file edits). The MCP server talks only to `127.0.0.1`.
+- Graphics pages are untrusted code: in the editor they run in sandboxed iframes with an opaque origin, and the API
+  rejects their `Origin: null`; for rendering they run in a separate headless browser profile that is deleted after.
 - Clips added by path are referenced, never moved; removing a clip only deletes copies LeanCut made.
-- Outgoing traffic: Whisper and optional model downloads, the configured LLM and voice servers, and the optional
-  update check and update download. See the [privacy policy](https://leancut.lucerowb.com/privacy.html).
+- Outgoing traffic: Whisper and optional model downloads, the configured LLM and voice servers, the optional
+  update check and update download, and the headless Chrome download when no Chrome-type browser is installed. A
+  coding agent you choose (Codex, Claude Code…) talks to its own service under its own terms. See the [privacy policy](https://leancut.lucerowb.com/privacy.html).
 
 ## Storage
 
@@ -243,10 +295,16 @@ build.py            PyInstaller packaging
   stabilisation and voice enhancement.
 - Privacy blur misses faces smaller than about 10 px in its 640 px pass (about 60 px in 4K). The plate model is
   trained on Chinese plates and is weak on others. Thumbnails and the intro/outro backgrounds aren't blurred (the main video, the preview and Shorts are).
-- Effects, transitions, titles, grades, voice-overs and ride-through fast-forwards exist only in the rendered MP4,
-  not in the edit lists.
+- Edit lists carry transitions, speed changes, titles, cards and cutaways, but not grades, LUTs, most effects,
+  voice-overs, motion graphics or ride-throughs (FCPXML gets to-do markers for grades; EDL comments). The FCPXML
+  effect identifiers haven't been checked in Final Cut itself.
 - Profanity bleeps use Whisper word timings stored since v0.3; lines transcribed earlier spread their words evenly, so a bleep there can be slightly off the word.
-- Telemetry is GPS-based and has only been tested on synthetic GPMF data, not on a real GoPro file.
+- Telemetry matches GoPro's reference parser on HERO5–HERO13 files, but its riding thresholds (braking, twisties)
+  haven't been checked on a real motorcycle ride: the only openly licensed GPS ride found is a bicycle.
+- Local models of 7–14B are weaker agents than hosted ones: they pick the wrong line now and then, and write simpler
+  animated pages. Codex's local mode needs OpenAI's open gpt-oss model.
+- The instant preview shows motion graphics in a sandboxed frame of the app's window (WebKit on macOS); exports
+  draw them in Chrome, the reference.
 - Mixed frame rates are normalised to the first clip's rate in the MP4; edit lists use the first clip's rate as the
   sequence rate.
 - Undo history is kept in memory and is lost when LeanCut closes.

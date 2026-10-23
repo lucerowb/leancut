@@ -148,12 +148,10 @@ def load_model(models_dir):
     """The three ONNX networks as one function: (feat_erb [T, NB_ERB], feat_spec [T, NB_DF] complex) ->
     (mask [T, NB_ERB], coefs [DF_ORDER, T, NB_DF] complex). Inputs must already be shifted by LOOKAHEAD frames."""
     import numpy as np
-    import onnxruntime as ort
+    import onnx_runtime
     d = ensure_model(models_dir)
-    opts = ort.SessionOptions()
-    opts.log_severity_level = 3
-    enc, erb_dec, df_dec = (ort.InferenceSession(str(d / f"{n}.onnx"), opts, providers=["CPUExecutionProvider"])
-                            for n in ("enc", "erb_dec", "df_dec"))
+    # CUDA/DirectML when installed; not CoreML: on Apple silicon it was no faster than the CPU (0.8 s per 30 s stereo)
+    enc, erb_dec, df_dec = (onnx_runtime.session(d / f"{n}.onnx") for n in ("enc", "erb_dec", "df_dec"))
 
     def run(feat_erb, feat_spec):
         spec_in = np.stack([feat_spec.real, feat_spec.imag])[None].astype(np.float32)

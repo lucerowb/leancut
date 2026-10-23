@@ -34,6 +34,8 @@ PyInstaller.__main__.run([
     "--clean",
     "--icon", str(ROOT / "assets" / "icon.png"),  # Pillow converts it to .icns / .ico
     "--add-data", f"{ROOT / 'static'}{os.pathsep}static",
+    "--add-data", f"{ROOT / 'graphics_templates'}{os.pathsep}graphics_templates",
+    "--hidden-import", "websockets.sync.client",
     "--osx-bundle-identifier", "app.leancut.desktop",
     # packages that load models, native libs or binaries at runtime
     "--collect-all", "faster_whisper",
@@ -42,7 +44,8 @@ PyInstaller.__main__.run([
     "--collect-all", "imageio_ffmpeg",
     "--collect-submodules", "uvicorn",
     # optional features app.py imports by name at runtime (PyInstaller can't see those imports)
-    *[a for m in ("telemetry", "vision", "enhance", "voice") for a in ("--hidden-import", m)],
+    *[a for m in ("telemetry", "vision", "enhance", "voice", "graphics", "agent_tools", "mcp_server", "leancut_cli")
+      for a in ("--hidden-import", m)],
     "--collect-data", "tokenizers",
 ])
 

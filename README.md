@@ -12,7 +12,7 @@
 
 [Website](https://leancut.lucerowb.com/) · [User guide](https://leancut.lucerowb.com/guide.html) · [Download](https://github.com/lucerowb/leancut/releases/latest) · [Changelog](CHANGELOG.md) · [Architecture](ARCHITECTURE.md)
 
-<img src="docs/assets/screens/editor.png" width="820" alt="LeanCut editor: program monitor, AI assistant, programme timeline and inspector">
+<img src="docs/assets/screens/editor.png" width="820" alt="LeanCut editor: program monitor with an animated graphic, agent picker, timeline with filmstrip and waveform, and inspector">
 
 </div>
 
@@ -28,13 +28,15 @@ Named after the lean angle through a corner, and a lean, tight edit.
 ## Features
 
 - **AI edit, fully local.** faster-whisper transcribes; Ollama or LM Studio scores every line 1–5 with a reason; LeanCut's code keeps the best lines up to your target length. Timestamps always come from Whisper, never the LLM.
+- **Agents edit with you.** An agent with tools on your own local model, or a coding agent you connect (Claude Code, Codex, Cursor, OpenCode, Gemini CLI, Qwen Code) over MCP. Agents read the edit, change it with validated, undoable actions, write animated graphics and look at frames of the finished video to check their work. See [CONNECT_AGENTS.md](CONNECT_AGENTS.md).
+- **Animated graphics.** Web pages that draw any moment, in the same page format as [OpenFilm](https://github.com/openfilm/openfilm), on a Graphics track over your footage and rendered frame-accurately with headless Chrome. Ten templates (titles, lower thirds, chapters, location pins, end screens, a GPS speedometer and route map and more), or let an agent write new ones.
 - **AI assistant and suggestions.** Type "make it about 8 minutes" or "slow down the biggest reaction" and it becomes checked, undoable edit actions. Per-part suggestions (rules plus the model's own ideas) can be applied or dismissed one by one.
-- **An editor with instant preview.** Program monitor, a timeline with Picture, Titles and Voice tracks, an Inspector for the selected part, keyboard shortcuts, and undo/redo for every edit. **Render preview** makes an exact 540p render.
+- **An editor with instant preview.** Program monitor, a timeline with filmstrip and waveform (Graphics, B-roll, Video, Audio, Titles and Voice-over tracks), trimming that snaps between words, split, multi-select, an Inspector, keyboard shortcuts, and undo/redo for every edit. Cut single words by deleting them in the transcript, and place text right on the video. **Render preview** makes an exact 540p render.
 - **Looks.** 8 effects (punch-in, push-in, slow motion, speed-up, black & white, vignette, glow, stabilise), 15 transitions including J-cuts and crossfades, 9 colour presets, auto colour, manual sliders, LUTs, titles, intro/outro cards and burned-in captions.
 - **Voice-overs in your own voice**, cloned locally from a stretch of your own speech (optional install; consent required).
 - **Decision engine.** Scores come from the model's token probabilities instead of generated JSON, with a confidence per line; unsure lines become "your call" suggestions. It learns from the lines you keep or cut yourself.
 - **Built for rides:**
-  - **Scenic B-roll** from silent stretches, scored for movement, colour and exposure, optionally rated by a local vision model.
+  - **Scenic B-roll** from silent stretches, scored for movement, colour and exposure, optionally rated by a local vision model, and laid over the talking of its own scene, in recording order.
   - **Say "clip that"** to keep the 30 seconds before it. Loud moments (shouts, laughs, revs) lift a line's score.
   - **GoPro telemetry**: hard braking, twisties, top speed and summits lift what was said there; motorways and stops drop out.
   - **Camera chapters** (GoPro, timecode-continuous files) join into one clip automatically.
@@ -42,7 +44,7 @@ Named after the lean angle through a corner, and a lean, tight edit.
 - **Clean sound.** −14 LUFS loudness, neural voice enhancement (DeepFilterNet3), wind and road-noise reduction, a music bed that ducks under speech, profanity bleep, and click-free cuts.
 - **Privacy blur** for faces and licence plates, and **footage search** by what's on screen (on-device CLIP).
 - **Publish-ready output:** the MP4, subtitles (`.srt`), a YouTube title, description, tags and valid chapters, six thumbnail picks, and vertical Shorts that follow the subject.
-- **Finish in your editor.** EDL (Resolve, Premiere), FCPXML (Final Cut, Resolve) and OpenTimelineIO, on each camera's own timecode (drop-frame aware).
+- **Finish in your editor.** EDL (Resolve, Premiere), FCPXML (Final Cut, Resolve) and OpenTimelineIO, with transitions, speed changes, titles and B-roll cutaways, on each camera's own timecode (drop-frame aware).
 - **Fast and resumable.** Hardware encoding (VideoToolbox, NVENC, Quick Sync, AMF) with GPU decoding; a re-export reuses finished parts (28 s instead of 9 min in our 4K test).
 - **Projects, an overnight batch queue and second-camera sync** by audio.
 - **In-app updates.** One anonymous request to GitHub tells you when a new version is out; install it from the banner. Turn the check off in Settings › Updates.
@@ -55,6 +57,9 @@ Named after the lean angle through a corner, and a lean, tight edit.
 | macOS (Apple Silicon) | `LeanCut-macOS.dmg` | Drag LeanCut to Applications. Builds are unsigned for now: the first time, right-click → **Open**. |
 | Windows 10/11 (64-bit) | `LeanCut-Windows.zip` | Extract and run `LeanCut.exe`. SmartScreen: **More info → Run anyway**. Needs the WebView2 runtime (built into Windows 11). |
 | Linux (x64) | `LeanCut-Linux-x64.tar.gz` | Extract and run `./LeanCut/install.sh` (installs for your user, no root). Ubuntu 22.04, Debian 12 or newer. |
+
+Each release has a `SHA256SUMS.txt` to check the download. Motion graphics use an installed Chrome, Edge, Brave or
+Chromium; without one, a headless Chrome (about 110 MB) is downloaded the first time.
 
 Get them from [Releases](https://github.com/lucerowb/leancut/releases/latest). You also need a local language-model
 server: [Ollama](https://ollama.com) (`ollama pull qwen2.5:7b`) or LM Studio (load a model → Developer → Start Server).
@@ -83,7 +88,7 @@ python build.py            # package: .app + .dmg on macOS, .zip on Windows, .ta
 pip install -r requirements-voice.txt   # optional: local voice cloning (PyTorch + Chatterbox)
 ```
 
-On Linux the native window needs `pip install "pywebview[qt]"`. Data lives in `workspace/` when running from source,
+On Linux the native window needs `pip install "pywebview[qt]"`. With an NVIDIA GPU (CUDA 12, cuDNN 9), `pip install onnxruntime-gpu` in place of `onnxruntime` runs the vision models on it. Data lives in `workspace/` when running from source,
 and in `~/Library/Application Support/LeanCut` (macOS), `%APPDATA%\LeanCut` (Windows) or `~/.local/share/LeanCut`
 (Linux) in the packaged app. `LEANCUT_HOME` overrides all of them.
 
@@ -108,12 +113,16 @@ llm_agent.py        LLM client, decision engine, batch scoring, assistant, sugge
 transcriber.py      Whisper, sentences, fragments, retakes, markers
 media_analysis.py   B-roll, loud moments, audio sync, thumbnails, Shorts windows, ride-throughs
 exporters.py        timecode, EDL, FCPXML, OTIO, SRT, chapters, YouTube text
-vision.py           optional: face/plate blur, CLIP search, subject tracking (ONNX, CPU)
-enhance.py          optional: DeepFilterNet3 voice enhancement (ONNX, CPU)
+vision.py           optional: face/plate blur, CLIP search, subject tracking (ONNX)
+enhance.py          optional: DeepFilterNet3 voice enhancement (ONNX)
+onnx_runtime.py     picks the fastest ONNX provider (CUDA, DirectML, CoreML) with a CPU fallback
 voice.py            optional: voice-overs (Chatterbox, a voice server, or the system voice)
 voice_server.py     OpenAI-compatible voice-cloning server for the packaged apps
 telemetry.py        optional: GoPro GPMF telemetry highlights
 updates.py          GitHub release check and in-app install
+agent_tools.py      the tools agents get (built-in local agent and MCP), and the agent manual
+mcp_server.py       stdio MCP server for coding agents (LeanCut --mcp); leancut_cli.py: the CLI
+graphics.py         motion graphics: headless Chrome (DevTools protocol), templates, checks; graphics_templates/
 desktop.py          native window, file pickers, PyInstaller entry point
 build.py            PyInstaller packaging; packaging/linux/ holds the Linux installer
 static/             UI (no build step) · docs/ website · tests/ unit tests
