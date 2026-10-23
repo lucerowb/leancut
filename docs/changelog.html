@@ -76,6 +76,7 @@
       </ul>
       <h3>Fixed</h3>
       <ul>
+        <li><b>In-app updates on Windows never finished.</b> The helper that swaps in the new version was started in a way Windows PowerShell quietly refuses, and <code>[ ]</code> in the install folder's name stopped it too. Both are fixed, and the helper now keeps a log (<code>.leancut-update.log</code> beside the app folder). <b>If you're on 0.3.0 for Windows, download 0.4.0 from the releases page once</b>: 0.3.0's own updater can't install it. From 0.4.0 on, updates install from inside the app.</li>
         <li><b>Pause didn't always pause.</b> Pressing pause while the preview was switching to another clip let playback start again, and Space could toggle twice when the play button had focus. Both are fixed.</li>
         <li>Two neighbouring parts with different looks could both play the same 0.3 s of footage at the join.</li>
       </ul>

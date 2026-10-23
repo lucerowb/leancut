@@ -23,7 +23,8 @@ Agents that edit with you, animated graphics, a proper timeline, B-roll that fol
 
 ### Fixed
 
+- **In-app updates on Windows never finished.** The helper that swaps in the new version was started in a way Windows PowerShell quietly refuses, and `[ ]` in the install folder's name stopped it too. Both are fixed, and the helper now keeps a log (`.leancut-update.log` beside the app folder). **If you're on 0.3.0 for Windows, download 0.4.0 from the releases page once**: 0.3.0's own updater can't install it. From 0.4.0 on, updates install from inside the app.
 - **Pause didn't always pause.** Pressing pause while the preview was switching to another clip let playback start again, and Space could toggle twice when the play button had focus. Both are fixed.
 - Two neighbouring parts with different looks could both play the same 0.3 s of footage at the join.
 
-**Downloads:** `LeanCut-macOS.dmg`, `LeanCut-Windows.zip`, `LeanCut-Linux-x64.tar.gz` (check them against `SHA256SUMS.txt`). Builds are still unsigned: see the README for the first-launch steps.
+**Downloads:** `LeanCut-macOS.dmg`, `LeanCut-Windows.zip`, `LeanCut-Linux-x64.tar.gz` (check them against `SHA256SUMS.txt`). Builds are still unsigned: see the README for the first-launch steps. **Windows users on 0.3.0:** download this version manually once.
