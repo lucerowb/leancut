@@ -52,7 +52,9 @@ def interest(stats):
     motion = np.array([r.get("motion", 0) for r in stats])
     sat = np.array([r.get("sat", 0) for r in stats])
     y = np.array([r.get("y", 128) for r in stats])
-    rank = lambda a: a.argsort().argsort() / max(len(a) - 1, 1)
+    def rank(a):  # percentile rank where equal values share a rank, so results don't depend on sort order
+        s = np.sort(a)
+        return (np.searchsorted(s, a, "left") + np.searchsorted(s, a, "right") - 1) / 2 / max(len(a) - 1, 1)
     pm, ps = rank(motion), rank(sat)
     moving = np.where(pm > 0.95, 0.4, pm)  # the shakiest 5% is usually a bump or a pan, not a view
     exposed = (y > 40) & (y < 225)
