@@ -203,10 +203,10 @@ def helper_script(platform: str, bundle: Path, new: Path, old: Path, pid: int, s
         return f"""# LeanCut updater (written by updates.py; deletes itself)
 $app = {q(bundle)}; $new = {q(new)}; $old = {q(old)}; $stage = {q(stage)}
 $exe = Join-Path $app 'LeanCut.exe'
-# a log beside the app folder, so a failed update can be diagnosed
-$log = Join-Path (Split-Path -LiteralPath $app -Parent) '.leancut-update.log'
+# a log beside the app folder, so a failed update can be diagnosed (Split-Path -LiteralPath -Parent fails in 5.1)
+$log = {q(Path(bundle).parent / ".leancut-update.log")}
 function Note($m) {{ Add-Content -LiteralPath $log -Value ((Get-Date -Format s) + ' ' + $m) -ErrorAction SilentlyContinue }}
-trap {{ Note ('error: ' + $_); continue }}
+trap {{ Add-Content -LiteralPath $log -Value ('error: ' + $_) -ErrorAction SilentlyContinue; continue }}
 Note 'updater started'
 Wait-Process -Id {int(pid)} -ErrorAction SilentlyContinue
 # -LiteralPath and Process.Start: -Path and Start-Process read [ ] in folder names as wildcards
