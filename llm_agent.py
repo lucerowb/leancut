@@ -198,8 +198,12 @@ def _hms(t):
     return f"{t // 3600:02d}:{t // 60 % 60:02d}:{t % 60:02d}"
 
 
-def decide(segments, provider, base_url, model, target_seconds=None, log=print, on_progress=lambda f: None) -> dict:
-    """segments: [{id, clip, start, end, text}] -> {id: {"keep": bool, "reason": str}} for every segment."""
+def decide(segments, provider, base_url, model, target_seconds=None, log=print, on_progress=lambda f: None,
+           known=None) -> dict:
+    """segments: [{id, clip, start, end, text}] -> {id: {"keep", "score", "reason"}} for every segment.
+
+    known: {id: (score, reason)} already decided (cached scores, retakes, spoken markers); only the rest is sent
+    to the LLM, so changing the target length or resuming after a cancel costs no LLM time."""
     total = sum(s["end"] - s["start"] for s in segments)
     ratio = target_seconds / total if target_seconds and total else None
     if ratio and ratio >= 1:
@@ -207,8 +211,14 @@ def decide(segments, provider, base_url, model, target_seconds=None, log=print, 
             "the LLM will only cut clear fluff.")
     elif ratio:
         log(f"Speech totals {total / 60:.1f} min; target {target_seconds / 60:.1f} min → keeping ~{ratio:.0%}.")
-    chunks = list(_chunks(segments))
-    scores, reasons = {}, {}
+    known = known or {}
+    scores = {i: sc for i, (sc, _) in known.items()}
+    reasons = {i: r for i, (_, r) in known.items()}
+    todo = [s for s in segments if s["id"] not in known]
+    if len(todo) < len(segments):
+        log(f"{len(segments) - len(todo)} segment(s) already scored (cache, retakes, markers); "
+            f"asking the LLM about {len(todo)}.")
+    chunks = list(_chunks(todo))
     for n, chunk in enumerate(chunks, 1):
         prompt = (f"Part {n} of {len(chunks)} of the vlog. Score all {len(chunk)} segments.\n\nSegments:\n"
                   + "".join(l for _, l in chunk))
@@ -232,3 +242,36 @@ def decide(segments, provider, base_url, model, target_seconds=None, log=print, 
     keep = select({s["id"]: s["end"] - s["start"] for s in segments}, scores, ratio)
     return {s["id"]: {"keep": s["id"] in keep, "score": scores.get(s["id"], 3), "reason": reasons.get(s["id"], "")}
             for s in segments}
+
+
+METADATA_PROMPT = """You write YouTube metadata for a vlog (moto vlog / daily vlog) from its transcript.
+The transcript may be a rough machine translation; describe what happens, never quote broken sentences.
+Lines are "[m:ss] text" on the final video's timeline.
+Reply with JSON only:
+{"title": "<under 70 characters, specific, no clickbait caps>",
+ "description": "<2-4 short paragraphs: what happens, where, highlights>",
+ "tags": ["<10-15 search tags>"],
+ "chapters": [{"time": "<m:ss copied from a line>", "title": "<2-5 words>"}]}
+Chapters: 4-10 of them, in order, at real topic changes, the first at 0:00."""
+
+
+def _seconds(text):
+    parts = [int(p) for p in re.findall(r"\d+", str(text))][-3:]
+    return sum(p * 60 ** i for i, p in enumerate(reversed(parts))) if parts else None
+
+
+def youtube_metadata(lines, provider, base_url, model, max_chars=CHUNK_CHARS * 2):
+    """lines: [(record_seconds, text)] -> {title, description, tags, chapters: [(seconds, title)]}."""
+    rows = [f"[{int(t) // 60}:{int(t) % 60:02d}] {text}" for t, text in lines]
+    step = max(1, sum(map(len, rows)) // max_chars + 1)  # long videos: sample evenly to fit the context
+    reply = chat(provider, base_url, model, METADATA_PROMPT, "\n".join(rows[::step]))
+    reply = re.sub(r"<think>.*?</think>", "", reply, flags=re.S)
+    try:
+        data = json.loads(reply[reply.find("{"):reply.rfind("}") + 1])
+    except json.JSONDecodeError as e:
+        raise LLMParseError(f"Metadata reply was not valid JSON: {reply[:200]!r}") from e
+    chapters = [(_seconds(c.get("time")), str(c.get("title", "")).strip()) for c in data.get("chapters", [])
+                if isinstance(c, dict)]
+    return {"title": str(data.get("title", "")).strip(), "description": str(data.get("description", "")).strip(),
+            "tags": [str(t).strip() for t in data.get("tags", []) if str(t).strip()][:15],
+            "chapters": [(s, n) for s, n in chapters if s is not None and n]}

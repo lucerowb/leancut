@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Changelog — LeanCut</title>
+<meta name="description" content="What changed in each LeanCut release.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,62..125,400..900;1,62..125,400..900&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/site.css">
+<style>
+.release h2 { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; }
+.release h2 time { font: 600 13px var(--mono); font-style: normal; letter-spacing: .08em; text-transform: uppercase; color: var(--paint); }
+.release li { margin-bottom: 6px; }
+</style>
+</head>
+<body class="docs">
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="top bar">
+  <div class="wrap">
+    <a class="brand" href="index.html" aria-label="LeanCut home">
+      <svg viewBox="0 0 64 64" aria-hidden="true"><rect x="2" y="2" width="60" height="60" rx="14" fill="#12151c"/><rect x="16" y="17" width="32" height="3" rx="1.5" fill="#3a4050"/><rect x="16" y="44" width="32" height="3" rx="1.5" fill="#3a4050"/><polygon points="17.6,38 26.4,25.6 46.4,25.6 37.6,38" fill="#2fbf71"/><rect x="31" y="13.5" width="2" height="36" rx="1" fill="#4f8cff"/><polygon points="28.8,13 35.2,13 32,16.8" fill="#4f8cff"/></svg>
+      LeanCut <small>Changelog</small>
+    </a>
+    <nav aria-label="Main">
+      <a href="index.html#how">Features</a>
+      <a href="guide.html">Guide</a>
+      <a href="changelog.html" aria-current="page">Changelog</a>
+      <a href="privacy.html">Privacy</a>
+      <a href="https://github.com/lucerowb/leancut">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<div class="wrap layout">
+  <aside class="toc" aria-label="Releases">
+    <p>Releases</p>
+    <ol>
+      <li><a href="#v0.2.0">v0.2.0</a></li>
+      <li><a href="#v0.1.0">v0.1.0</a></li>
+    </ol>
+  </aside>
+
+  <main id="main" class="doc">
+    <h1>Changelog</h1>
+    <p class="lede">What changed in each release. Downloads for every version are on the <a href="https://github.com/lucerowb/leancut/releases">GitHub releases page</a>.</p>
+    <p><a class="btn primary" href="https://github.com/lucerowb/leancut/releases/latest">Download the latest release</a></p>
+
+    <section class="release" id="v0.2.0">
+      <h2>v0.2.0 <time datetime="2026-10-23">23 October 2026</time></h2>
+      <p>Built for the whole ride, not just the talking. LeanCut is now open source.</p>
+      <h3>Highlights</h3>
+      <ul>
+        <li><b>Scenic B-roll.</b> Silent stretches are scored for movement, colour and exposure, and the best views fill a share of the video you choose (15% by default).</li>
+        <li><b>Say “clip that”.</b> A spoken marker keeps the 30 seconds before it; the command itself is cut.</li>
+        <li><b>Publish-ready extras.</b> Subtitles (<code>.srt</code>), a YouTube title, description, tags and valid chapters, six thumbnail picks, and optional vertical Shorts.</li>
+        <li><b>Better sound.</b> −14 LUFS loudness, optional wind and road-noise reduction, a music bed that ducks under speech, and click-free cuts.</li>
+        <li><b>Faster and resumable exports.</b> Hardware encoding (VideoToolbox, NVENC, Quick Sync, AMF) with GPU decoding, a Cancel button, and cached parts: in our 4K test a re-export took 28 seconds instead of 9 minutes.</li>
+        <li><b>More ways into your editor.</b> FCPXML (Final Cut Pro, Resolve) with chapter markers, and OpenTimelineIO, next to the EDL.</li>
+        <li><b>Settings page.</b> Updates, export folder and file names, formats, encoder, audio, rider AI and models in one place.</li>
+        <li><b>Update alerts.</b> A banner tells you when a new version is out, with the right download. It's one anonymous request to GitHub; turn it off in Settings › Updates.</li>
+      </ul>
+      <h3>Also new</h3>
+      <ul>
+        <li>Projects: keep every trip separate, switch from the top bar, and run an overnight batch of auto-edits and exports.</li>
+        <li>Second-camera sync: mark a clip as an angle of another and LeanCut lines them up by audio for your editor.</li>
+        <li>Retakes are detected and the earlier take is cut; Whisper repeat loops are cleaned up.</li>
+        <li>Loud moments (shouts, laughs, revs) lift the score of what was said there.</li>
+        <li>Optional ride-through fast-forwards over long dropped stretches.</li>
+        <li>Drag the edges of any kept block on the timeline to trim it.</li>
+        <li>Custom Whisper models: use any CTranslate2 model, including ones fine-tuned for one language.</li>
+        <li>AI scores are cached per line, so changing the target length is instant.</li>
+      </ul>
+      <h3>Fixed</h3>
+      <ul>
+        <li><b>EDL source times were wrong for cameras that embed timecode</b> (DJI, GoPro and others), so an imported edit pointed at the wrong frames. Edit lists now use each clip's own timecode, in drop-frame at 29.97 fps, which also removes the one-frame-per-minute drift.</li>
+        <li><b>Security:</b> the local server answered requests from any web page. It now accepts requests only from its own window.</li>
+        <li>Whisper checked Hugging Face for model updates every time it loaded; cached models now load fully offline.</li>
+        <li>10-bit footage reported brightness on the wrong scale, which hid most B-roll.</li>
+      </ul>
+      <h3>Upgrade notes</h3>
+      <ul>
+        <li>Your v0.1 project is moved into the new projects layout the first time v0.2 starts, including its exports. Nothing is deleted; the old file is kept as <code>project.v0.1.json.bak</code>.</li>
+        <li>Lines will be re-scored once, because the scoring prompt changed.</li>
+        <li>Exports are now named after the project instead of <code>final_youtube_cut</code>. Change it in Settings › Export destination.</li>
+      </ul>
+    </section>
+
+    <section class="release" id="v0.1.0">
+      <h2>v0.1.0 <time datetime="2026-10-23">23 October 2026</time></h2>
+      <p>First release.</p>
+      <ul>
+        <li><b>Desktop app for macOS and Windows:</b> a native window around the editor, shipped as <code>LeanCut-macOS.dmg</code> (Apple Silicon) and <code>LeanCut-Windows.zip</code> (64-bit Windows 10/11).</li>
+        <li><b>The full pipeline, on your computer:</b> FFmpeg extracts the audio, Silero VAD drops silence, wind and engine noise, faster-whisper transcribes, and a local language model scores every segment.</li>
+        <li><b>Local LLM scoring with a length budget:</b> works with Ollama or LM Studio. The model scores each segment from 1 to 5 with a reason, and LeanCut keeps the best segments until your target length is reached.</li>
+        <li><b>Review before export:</b> a timeline and a scored transcript; tick or untick any line and click it to preview.</li>
+        <li><b>Export:</b> <code>final_youtube_cut.mp4</code> plus a CMX3600 <code>.edl</code> that relinks to your original clips in DaVinci Resolve or Premiere Pro.</li>
+        <li><b>Memory guard:</b> refuses Ollama models larger than about 75% of your memory, which would swap to disk and stall.</li>
+        <li><b>Streaming with stall detection:</b> slow models keep working; a model that produces no output for 300 seconds fails with a clear error instead of hanging.</li>
+        <li><b>Spoken-language setting:</b> auto-detect or pick the language, including choosing English to get a rough English transcript of footage Whisper handles poorly.</li>
+        <li><b><code>large-v3-turbo</code> by default:</b> the most accurate Whisper model for accents, wind and other languages, and still quick on a modern CPU.</li>
+      </ul>
+    </section>
+  </main>
+</div>
+
+<footer>
+  <div class="wrap">
+    <span>LeanCut · local AI video editing for vloggers · MIT License</span>
+    <nav aria-label="Footer">
+      <a href="guide.html">Guide</a>
+      <a href="changelog.html">Changelog</a>
+      <a href="privacy.html">Privacy</a>
+      <a href="terms.html">Terms</a>
+      <a href="https://github.com/lucerowb/leancut">GitHub</a>
+      <a href="https://github.com/lucerowb/leancut/blob/main/LICENSE">License</a>
+    </nav>
+  </div>
+</footer>
+</body>
+</html>

@@ -1,0 +1,399 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>LeanCut Guide</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Install, configure and troubleshoot LeanCut, the local AI video editor for vloggers.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,62..125,400..900;1,62..125,400..900&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/site.css">
+<style>
+/* Guide-only rules; the doc layout, tokens, nav, tables and footer live in assets/site.css. */
+ol.steps { padding-left: 22px; } ol.steps li { margin-bottom: 8px; }
+.doc td:first-child { white-space: nowrap; font-weight: 700; }
+dl.trouble dt { font-family: var(--mono); font-size: 14px; color: var(--warn); margin-top: 20px; overflow-wrap: anywhere; }
+dl.trouble dd { margin: 4px 0 0; }
+.score { font: 600 13px var(--mono); color: var(--keep); }
+.road { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 32px; }
+.road h3 { grid-column: 1 / -1; }
+.road div { min-width: 0; }
+.road b { display: block; }
+.road span { color: var(--muted); font-size: 15px; }
+@media (max-width: 880px) { .road { grid-template-columns: minmax(0, 1fr); } }
+</style>
+</head>
+<body class="docs">
+
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="top bar">
+  <div class="wrap">
+    <a class="brand" href="index.html" aria-label="LeanCut home">
+      <svg viewBox="0 0 64 64" aria-hidden="true"><rect x="2" y="2" width="60" height="60" rx="14" fill="#12151c"/><rect x="16" y="17" width="32" height="3" rx="1.5" fill="#3a4050"/><rect x="16" y="44" width="32" height="3" rx="1.5" fill="#3a4050"/><polygon points="17.6,38 26.4,25.6 46.4,25.6 37.6,38" fill="#2fbf71"/><rect x="31" y="13.5" width="2" height="36" rx="1" fill="#4f8cff"/><polygon points="28.8,13 35.2,13 32,16.8" fill="#4f8cff"/></svg>
+      LeanCut <small>Guide</small>
+    </a>
+    <nav aria-label="Main">
+      <a href="index.html#how">Features</a>
+      <a href="guide.html" aria-current="page">Guide</a>
+      <a href="changelog.html">Changelog</a>
+      <a href="privacy.html">Privacy</a>
+      <a href="https://github.com/lucerowb/leancut">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<div class="wrap layout">
+  <aside class="toc" aria-label="On this page">
+    <p>On this page</p>
+    <ol>
+      <li><a href="#install">Install</a></li>
+      <li><a href="#first-run">First run</a></li>
+      <li><a href="#workflow">Editing workflow</a></li>
+      <li><a href="#options">Options reference</a></li>
+      <li><a href="#scoring">How the AI decides</a></li>
+      <li><a href="#models">Choosing models</a></li>
+      <li><a href="#languages">Non-English footage</a></li>
+      <li><a href="#export">Export</a></li>
+      <li><a href="#projects">Projects &amp; batch</a></li>
+      <li><a href="#updates">Updates</a></li>
+      <li><a href="#troubleshooting">Troubleshooting</a></li>
+      <li><a href="#files">Where files live</a></li>
+      <li><a href="#developers">For developers</a></li>
+      <li><a href="#roadmap">Roadmap</a></li>
+      <li><a href="#faq">FAQ</a></li>
+    </ol>
+  </aside>
+
+  <main id="main" class="doc">
+    <h1>LeanCut guide</h1>
+    <p class="lede">LeanCut turns long vlog footage into a tight cut using speech recognition and a language model that both run on your computer. This guide covers installing it, editing your first video, and fixing the problems people actually hit.</p>
+
+    <h2 id="install">Install</h2>
+    <p>LeanCut needs two things: the app itself, and a local language-model server (Ollama or LM Studio) that it talks to.</p>
+
+    <h3>macOS (Apple Silicon)</h3>
+    <ol class="steps">
+      <li>Download <code>LeanCut-macOS.dmg</code> from the project's <a href="https://github.com/lucerowb/leancut/releases/latest">Releases page</a>.</li>
+      <li>Open it and drag <b>LeanCut</b> into <b>Applications</b>.</li>
+      <li>The first time, right-click LeanCut and choose <b>Open</b>. macOS asks once because the app is not notarized by Apple yet. If it still refuses, open <b>System Settings → Privacy &amp; Security</b> and click <b>Open Anyway</b>.</li>
+    </ol>
+
+    <h3>Windows 10 / 11 (64-bit)</h3>
+    <ol class="steps">
+      <li>Download <code>LeanCut-Windows.zip</code> from the <a href="https://github.com/lucerowb/leancut/releases/latest">Releases page</a> and extract it anywhere, for example <code>C:\Apps\LeanCut</code>.</li>
+      <li>Run <code>LeanCut.exe</code>. If SmartScreen warns about an unknown publisher, click <b>More info → Run anyway</b>.</li>
+      <li>LeanCut draws its window with Microsoft Edge WebView2, which ships with Windows 11 and current Windows 10. If the window stays blank, install the WebView2 Runtime from Microsoft.</li>
+    </ol>
+
+    <h3>Language-model server</h3>
+    <p>Pick one. Both are free.</p>
+    <ul>
+      <li><b>Ollama</b> (simplest): install it from ollama.com, then pull a model that fits your memory (see <a href="#models">Choosing models</a>):
+        <pre><code>ollama pull qwen2.5:7b</code></pre>
+        Ollama runs in the background at <code>http://localhost:11434</code>.</li>
+      <li><b>LM Studio</b>: download a model such as <i>Qwen 2.5 7B Instruct</i>, open the <b>Developer</b> tab and click <b>Start Server</b>. It listens on <code>http://localhost:1234/v1</code>.</li>
+    </ul>
+
+    <h3>Run from source instead</h3>
+    <p>Needs Python 3.10–3.12 (faster-whisper does not support newer versions yet).</p>
+<pre><code>python3.12 -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
+pip install -r requirements.txt -r requirements-build.txt
+python desktop.py                # native window
+python app.py                    # or: browser UI at http://127.0.0.1:8765</code></pre>
+
+    <h2 id="first-run">First run</h2>
+    <ol class="steps">
+      <li>Open <b>Settings</b> and scroll to <b>Models</b>. It shows whether FFmpeg was found (the app bundles its own) and which Whisper models are on disk.</li>
+      <li>Click <b>Download</b> next to <code>large-v3-turbo</code> (about 1.6 GB, once). You can skip this; the model also downloads the first time you run an edit.</li>
+      <li>Click <b>Test LLM connection</b>. You should see “Connected · N model(s)”. If not, see <a href="#troubleshooting">Troubleshooting</a>.</li>
+    </ol>
+    <div class="note"><b>Everything after this is offline.</b> Besides the one-time model download from Hugging Face, LeanCut only talks to the language-model server you chose and, unless you turn it off in <b>Settings › Updates</b>, makes an anonymous update check against GitHub. Details are in the <a href="privacy.html">privacy policy</a>.</div>
+
+    <h2 id="workflow">Editing workflow</h2>
+    <h3>1. Pick or create a project</h3>
+    <p>Each trip or video is a project with its own clips, edit and exports. Switch projects from the menu at the top of the window, or manage them on the <b>Projects</b> tab.</p>
+    <h3>2. Add clips</h3>
+    <p>Click the drop zone to open the file picker and select your <code>.mp4</code>, <code>.mov</code> or <code>.mkv</code> files. In the desktop app, picked files are used where they are and never copied. Dragging files onto the drop zone copies them into LeanCut's data folder instead, which doubles the disk space they use. Use ↑ and ↓ to put clips in story order; the final video follows that order.</p>
+    <p>Filmed the same moments on a second camera (a chest cam or a phone)? Set that clip's <b>Camera</b> menu to <b>Second angle of …</b>. LeanCut lines it up with the main clip by comparing their audio and shows the offset. Second angles don't change the edit; they are attached to the FCPXML and OpenTimelineIO exports so you can switch angles in your editor.</p>
+    <h3>3. Set the options</h3>
+    <p>In <b>Models &amp; API</b>, choose the Whisper model, the spoken language, your language-model server and model, and an optional target length such as <code>10-15 minutes</code>. Everything else (export formats, destination, audio, B-roll) lives on the Settings tab. Every option is explained in the <a href="#options">Options reference</a>.</p>
+    <h3>4. Run the auto-edit</h3>
+    <p>Click <b>① Auto-edit with AI</b>. The Processing panel shows each step:</p>
+    <ol class="steps">
+      <li>Extracts audio and transcribes each clip (cached, so this only happens once per clip, model and language).</li>
+      <li>Joins fragments into whole thoughts, marks retakes, and finds lines where you said a marker phrase.</li>
+      <li>Listens for loud moments: shouts, laughs and revs that jump above the road noise.</li>
+      <li>Asks the language model to score every line it hasn't scored before.</li>
+      <li>Picks the lines that fit your target, then looks for scenic B-roll in the silent stretches.</li>
+    </ol>
+    <p>AI scores are cached per line and model. Changing the target length and re-running costs no AI time at all.</p>
+    <h3>5. Review and adjust</h3>
+    <p>The timeline shows one lane per clip. <b style="color:var(--keep)">Green</b> blocks are kept lines, <b style="color:var(--paint)">amber</b> blocks are scenic B-roll (dashed when not used), grey blocks are speech the AI cut, and the dark background is silence that was never transcribed.</p>
+    <ul>
+      <li><b>Trim:</b> drag the handles at either end of a kept block.</li>
+      <li><b>Preview:</b> click a block or a transcript line.</li>
+      <li><b>Override:</b> tick or untick any line or B-roll window. Every line shows its score and the reason, for example <span class="score">★1 earlier take of the next line</span>.</li>
+    </ul>
+    <h3>6. Export</h3>
+    <p>Click <b>② Export</b>. When it finishes, the Processing panel lists every file it wrote; click <b>Open output folder</b> to see them. You can press <b>Cancel</b> at any time. Finished work is kept, and the next export reuses every part that was already rendered: a 4K re-export that took 9 minutes the first time took 28 seconds the second.</p>
+
+    <h2 id="options">Options reference</h2>
+    <h3>Editor panel</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Option</th><th>What it does</th><th>Default</th></tr></thead>
+        <tbody>
+          <tr><td>Whisper model</td><td>Speech-recognition model. Bigger is more accurate and slower. <code>large-v3-turbo</code> is the best balance for every language.</td><td><code>large-v3-turbo</code></td></tr>
+          <tr><td>Spoken language</td><td>Language of the talking in your clips. Auto-detect works for single-language footage; set it explicitly for mixed or less common languages (see <a href="#languages">Non-English footage</a>).</td><td>Auto-detect</td></tr>
+          <tr><td>LLM server</td><td><b>Ollama</b> or <b>LM Studio / OpenAI-compatible</b>. Switching fills in the matching base URL.</td><td>Ollama</td></tr>
+          <tr><td>Base URL</td><td>Where the server listens. Change it only if you moved the port.</td><td><code>http://localhost:11434</code></td></tr>
+          <tr><td>LLM model</td><td>The model that scores your transcript. The list comes from the server; click ↻ after pulling a new one.</td><td>First available</td></tr>
+          <tr><td>Target length</td><td>How long the talking part should be: <code>12</code>, <code>12 minutes</code> or a range like <code>10-15 minutes</code> (the midpoint is used). Saved per project. Leave it empty to keep only the engaging parts.</td><td>Empty</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <h3>Settings tab</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Setting</th><th>What it does</th><th>Default</th></tr></thead>
+        <tbody>
+          <tr><td>Updates</td><td>Checks GitHub for a newer release when LeanCut starts, and shows a banner with the right download for your computer. <b>Check now</b> works even when automatic checks are off.</td><td>On</td></tr>
+          <tr><td>Export folder</td><td>Where exports are saved. <b>Choose…</b> opens a folder picker in the desktop app. <b>Reset</b> goes back to the project's own <code>output</code> folder.</td><td>Project folder</td></tr>
+          <tr><td>File name</td><td>Base name for every exported file. <code>{project}</code> is the project name, <code>{date}</code> is today's date.</td><td><code>{project}</code></td></tr>
+          <tr><td>What to export</td><td>Any mix of video, subtitles, YouTube text, thumbnails, EDL, FCPXML, OpenTimelineIO and vertical Shorts (1–5). See <a href="#export">Export</a>.</td><td>All but Shorts</td></tr>
+          <tr><td>Render mode</td><td><b>Frame-accurate</b> re-encodes every cut and normalises resolution and frame rate, so clips from different cameras join cleanly. <b>Fast</b> copies the video stream: much quicker, but cuts land on the nearest keyframe, all clips must share codec and resolution, and ride-throughs are skipped.</td><td>Frame-accurate</td></tr>
+          <tr><td>Encoder</td><td><b>Auto</b> uses the hardware encoder (VideoToolbox on Mac; NVENC, Quick Sync or AMF on Windows) when one works, otherwise libx264 CRF 18. Decoding uses the GPU too when available.</td><td>Auto</td></tr>
+          <tr><td>YouTube loudness</td><td>Two-pass normalisation to −14 LUFS integrated, −1.5 dBTP.</td><td>On</td></tr>
+          <tr><td>Reduce wind and road noise</td><td>A high-pass filter plus FFT noise reduction on the final audio. Helps with steady roar; it can't fix clipping from strong gusts.</td><td>Off</td></tr>
+          <tr><td>Background music</td><td>A track looped under the whole video, ducked automatically whenever someone speaks. Volume sets its level between speech.</td><td>None, 0.15</td></tr>
+          <tr><td>Scenic B-roll</td><td>Fills part of the video with the most interesting silent footage. The share sets how much: at 15%, 10 minutes of talking gets about 1.8 minutes of B-roll.</td><td>On, 15%</td></tr>
+          <tr><td>Loud moments</td><td>Lines spoken during a loud spike get +1 on their score.</td><td>On</td></tr>
+          <tr><td>Ride-throughs</td><td>Gaps of 40 s or more between kept parts of a clip become a 6-second silent fast-forward (up to 64× speed). Needs frame-accurate mode.</td><td>Off</td></tr>
+          <tr><td>Spoken markers</td><td>Comma-separated phrases. Saying one keeps the 30 seconds before it; a line that is only the phrase is cut.</td><td><code>clip that, mark this, …</code></td></tr>
+          <tr><td>Custom Whisper model</td><td>A Hugging Face repo id or a local folder with a CTranslate2 Whisper model. Overrides the size picked in the editor (see <a href="#custom-whisper">custom models</a>).</td><td>Empty</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h2 id="scoring">How the AI decides</h2>
+    <p>Local language models are good at judging lines but bad at hitting a time budget, so LeanCut splits the job. The model scores every transcript line, and LeanCut's own code decides what fits.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Score</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td class="score">★5</td><td>Must keep: opening hook, key story beat, funny moment, sign-off</td></tr>
+          <tr><td class="score">★4</td><td>Strong: genuine reaction, greeting or banter, an insight</td></tr>
+          <tr><td class="score">★3</td><td>Fine: ordinary narration that keeps the story moving</td></tr>
+          <tr><td class="score">★2</td><td>Weak: logistics nobody needs, rambling</td></tr>
+          <tr><td class="score">★1</td><td>Cut: repeated take, false start, mumbling, unintelligible noise</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Some lines are decided without asking the model:</p>
+    <ul>
+      <li><b>Retakes:</b> when two neighbouring lines are at least 75% the same words, the earlier one gets ★1. Whisper's repeat loops in wind noise (“She is the type of child. She is the type of child?”) are collapsed to one sentence first.</li>
+      <li><b>Spoken markers:</b> lines within 30 seconds before a marker phrase get ★5. A line that is nothing but the phrase gets ★1, because viewers shouldn't hear “clip that”.</li>
+      <li><b>Loud moments:</b> a line spoken during a loudness spike (at least 8 dB above the surrounding 20 seconds and in the clip's loudest 10%) gets +1, up to ★5.</li>
+    </ul>
+    <p>Then one of three rules picks the kept lines:</p>
+    <ul>
+      <li><b>No target length:</b> keep everything scored 3 or higher, and never less than 30% of the talking.</li>
+      <li><b>Target longer than all the talking:</b> cut only ★1 lines, and always keep at least 80%.</li>
+      <li><b>Target shorter than the talking:</b> keep the highest-scored lines first until the target is reached.</li>
+    </ul>
+    <p>Before scoring, LeanCut joins short fragments (“I” · “have to” · “go now.”) into whole thoughts of up to 20 seconds, so the model never keeps half a sentence. A pause longer than 1.5 seconds always stays a possible cut point. Each kept segment gets 0.15 s of padding, kept segments less than 0.6 s apart are joined, and every cut gets a 30 ms audio fade so it doesn't click over engine drone.</p>
+    <h3>Scenic B-roll</h3>
+    <p>LeanCut reads only the keyframes of each clip (about one per second; 22 minutes of 4K took under a minute on an M5 Pro, and the result is cached), measuring movement, colour and brightness. In silent stretches of at least 6 seconds it rates 5-second windows: steady movement and colour score high, the shakiest 5% (bumps, fast pans) and badly exposed frames score low. The best windows across the whole project are kept until the B-roll share is used. This is a heuristic, not an image-recognition model, so check the amber blocks before exporting.</p>
+
+    <h2 id="models">Choosing models</h2>
+    <h3>Language model</h3>
+    <p>The model's weights must fit in memory. On Apple Silicon that is the unified memory; on a PC it is RAM, plus GPU memory if you have one. LeanCut refuses an Ollama model larger than 75% of your memory, because such a model swaps to disk and can take hours per request.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Memory</th><th>Suggested model</th><th>Size on disk</th></tr></thead>
+        <tbody>
+          <tr><td>8 GB</td><td><code>qwen2.5:3b</code>, <code>llama3.2:3b</code></td><td>about 2 GB</td></tr>
+          <tr><td>16 GB</td><td><code>qwen2.5:7b</code>, <code>llama3.1:8b</code></td><td>about 5 GB</td></tr>
+          <tr><td>24 GB</td><td><code>qwen2.5:14b</code></td><td>about 9 GB</td></tr>
+          <tr><td>32 GB+</td><td><code>qwen2.5:32b</code>, <code>gemma2:27b</code></td><td>16–20 GB</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>“Thinking” models (Qwen 3, Gemma 4 and similar) work too. With Ollama, LeanCut turns their thinking off, since it only slows down a scoring job. In LM Studio, switch thinking off in the model's settings for the same speed-up.</p>
+    <h3>Whisper model</h3>
+    <p><code>tiny</code> and <code>base</code> are for quick tests on English. <code>small</code> and <code>medium</code> are fine for clear English. <code>large-v3-turbo</code> is the default because it is far better on accents, wind and other languages, and on a modern CPU it is still quick: 22 minutes of footage transcribed in about 7 minutes on an M5 Pro Mac.</p>
+    <h3 id="custom-whisper">Custom and fine-tuned Whisper models</h3>
+    <p>Any Whisper model converted to CTranslate2 works, including community models fine-tuned for one language. Enter its Hugging Face repo id (for example <code>Systran/faster-whisper-large-v3</code>) or a local folder in <b>Settings › Models › Custom Whisper model</b>. To convert a Transformers checkpoint yourself:</p>
+<pre><code>pip install ctranslate2 transformers torch
+ct2-transformers-converter --model &lt;org/whisper-model&gt; --output_dir whisper-ct2 \
+  --copy_files tokenizer.json preprocessor_config.json --quantization float16</code></pre>
+
+    <h2 id="languages">Non-English footage</h2>
+    <p>Whisper's accuracy varies a lot by language. For widely spoken languages, set <b>Spoken language</b> to that language. For languages Whisper handles poorly, or for speech that mixes a language with English, set it to <b>English</b>. Whisper then writes a rough English version of what was said, with timestamps that still match the speech. That is the best input a local model can judge.</p>
+    <div class="note"><b>Real example.</b> Nepali–English moto-vlog footage: <code>small</code> on auto-detect produced random characters from four different scripts, <code>large-v3-turbo</code> set to Nepali was still garbled and 11× slower, and <code>large-v3-turbo</code> set to English produced readable lines in 33 seconds per 2 minutes of audio.</div>
+    <p>With Auto-detect on, the Processing log shows the language Whisper detected and how sure it was. If that is wrong, set the language yourself. A fine-tuned model for your language (see above) is the other option.</p>
+
+    <h2 id="export">Export</h2>
+    <p>Every file starts with the name pattern from Settings (by default, the project name).</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>File</th><th>What it is</th></tr></thead>
+        <tbody>
+          <tr><td><code>.mp4</code></td><td>The finished video: H.264 at the first clip's resolution and frame rate, 192 kbps AAC stereo, loudness-matched. Hardware encoding targets about 0.12 bits per pixel (≈30 Mbps for 4K30); software uses CRF 18.</td></tr>
+          <tr><td><code>.srt</code></td><td>Subtitles for the kept lines, timed to the cut and split into cues of up to 84 characters. Upload it to YouTube next to the video.</td></tr>
+          <tr><td><code>_youtube.txt</code></td><td>A title, a description, tags and chapters written by your language model. Chapters follow YouTube's rules: the first at 0:00, at least 10 seconds apart, at least three of them.</td></tr>
+          <tr><td><code>_thumb_1…6.jpg</code></td><td>The sharpest, best-exposed frames from the top-scored moments and B-roll, at full resolution.</td></tr>
+          <tr><td><code>.edl</code></td><td>CMX3600 edit list for Resolve and Premiere.</td></tr>
+          <tr><td><code>.fcpxml</code></td><td>FCPXML 1.10 for Final Cut Pro and Resolve, with chapter markers and any synced second angle as a connected clip.</td></tr>
+          <tr><td><code>.otio</code></td><td>OpenTimelineIO for Resolve 18.5+ and other OTIO tools: V1 and A1 hold the cut, V2 the synced second angle.</td></tr>
+          <tr><td><code>_short_N.mp4</code></td><td>Vertical 1080×1920 Shorts: the best continuous 15–58 second stretches by score, centre-cropped.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="note"><b>Camera timecode is respected.</b> DJI and GoPro write time-of-day timecode (for example <code>21:01:21;28</code>, drop-frame at 29.97 fps). LeanCut writes source times on that timecode, in drop-frame where the camera uses it, so editors place every cut on the right frames. Ride-through fast-forwards exist only in the MP4; the edit lists leave them out.</div>
+    <h3>Open the edit in DaVinci Resolve</h3>
+    <ol class="steps">
+      <li>Import your original clips into the Media Pool.</li>
+      <li><b>File → Import → Timeline…</b> and select the <code>.fcpxml</code>, <code>.otio</code> or <code>.edl</code>.</li>
+      <li>Leave “Automatically import source clips into media pool” on, and point it at the folder that holds your clips if asked.</li>
+    </ol>
+    <h3>Open the edit in Premiere Pro</h3>
+    <ol class="steps">
+      <li><b>File → Import…</b> and select the <code>.edl</code>.</li>
+      <li>Choose the sequence settings that match your footage, then relink the offline clips to your originals.</li>
+    </ol>
+    <h3>Open the edit in Final Cut Pro</h3>
+    <ol class="steps">
+      <li><b>File → Import → XML…</b> and select the <code>.fcpxml</code>. A new event named LeanCut appears with the project inside.</li>
+    </ol>
+
+    <h2 id="projects">Projects &amp; overnight batch</h2>
+    <p>The <b>Projects</b> tab lists every project with its clip count, total footage and whether it has been edited. <b>Remove</b> moves a project's folder aside (to <code>projects/.trash-…</code> in the data folder) rather than deleting it, and your original footage is never touched.</p>
+    <p>To process several rides unattended, tick them, choose <b>Auto-edit</b>, <b>Export</b> or both, and click <b>Run batch</b>. Projects run one after another with the current settings; if one fails, the rest still run and the log names the failures at the end. Cancel stops the whole batch.</p>
+
+    <h2 id="updates">Updates</h2>
+    <p>When LeanCut starts, it asks GitHub for the latest release (at most every six hours). If a newer version exists, a banner offers the download for your system (the macOS <code>.dmg</code> or the Windows <code>.zip</code>) and the release notes. To update, quit LeanCut and replace the app with the new one; projects and settings live in the data folder and are kept. Turn the check off in <b>Settings › Updates</b>; <b>Check now</b> still works.</p>
+
+    <h2 id="troubleshooting">Troubleshooting</h2>
+    <dl class="trouble">
+      <dt>Cannot reach the LLM server at …</dt>
+      <dd>The server isn't running or the URL is wrong. Start Ollama (it normally runs in the menu bar or system tray, or run <code>ollama serve</code>) or click <b>Start Server</b> in LM Studio, then click ↻ next to the model list. LeanCut checks this before transcribing, so you never wait through a long transcription only to fail at the end.</dd>
+      <dt>'model' needs 19.9 GB but this machine has 24 GB of memory</dt>
+      <dd>The model is too big to run without swapping. Pick a smaller one from <a href="#models">the table above</a>.</dd>
+      <dt>The LLM produced no output for 300 s</dt>
+      <dd>The model stopped responding, almost always because it doesn't fit in memory (LM Studio models aren't size-checked in advance). Load a smaller model or close other memory-hungry apps. A slow model that is still producing text never triggers this error.</dd>
+      <dt>The local LLM ran out of (V)RAM</dt>
+      <dd>The server failed to load the model. Unload other models in Ollama or LM Studio, or choose a smaller model or quantization (Q4).</dd>
+      <dt>Transcript looks like random characters</dt>
+      <dd>Whisper misheard the language. Switch to <code>large-v3-turbo</code> and set the spoken language. For mixed or less common languages choose English (see <a href="#languages">Non-English footage</a>). Changing the model or language re-transcribes automatically.</dd>
+      <dt>The AI kept almost nothing (or everything)</dt>
+      <dd>Check the target length. With no target LeanCut keeps lines scored ★3+; with a target it keeps the best lines up to that length. Small models score less consistently, and a larger model gives steadier results.</dd>
+      <dt>No working hardware H.264 encoder was found</dt>
+      <dd>You chose <b>Hardware only</b> on a computer without one (or without current GPU drivers). Choose <b>Auto</b>, which falls back to software encoding.</dd>
+      <dt>Sync confidence is low</dt>
+      <dd>The two cameras' audio didn't match well, for example when one mic only hears wind. Check the offset in your editor, or remove the angle and line it up by hand.</dd>
+      <dt>A clip won't play in the preview</dt>
+      <dd>The built-in player can't decode some formats, such as certain HEVC <code>.mov</code> files. Processing and export still work; only the preview is affected.</dd>
+      <dt>GPU error during transcription</dt>
+      <dd>LeanCut retries on the CPU automatically and notes it in the log. To use an NVIDIA GPU on Windows, install CUDA 12 and cuDNN 9.</dd>
+      <dt>Nothing to render: no segments are marked as kept</dt>
+      <dd>Run the auto-edit first, or tick at least one line in the transcript.</dd>
+      <dt>LeanCut only accepts requests from its own window</dt>
+      <dd>Something other than LeanCut's own window tried to use its local server, for example a web page. That's blocked on purpose. If you run <code>python app.py</code>, open it at <code>http://127.0.0.1:8765</code> or <code>http://localhost:8765</code>.</dd>
+    </dl>
+    <p>Still stuck? The desktop app writes a log to <code>leancut.log</code> in the data folder (see below). Include it when you <a href="https://github.com/lucerowb/leancut/issues/new/choose">report a problem</a>.</p>
+
+    <h2 id="files">Where files live</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>What</th><th>Location</th></tr></thead>
+        <tbody>
+          <tr><td>Data folder (macOS)</td><td><code>~/Library/Application Support/LeanCut/</code></td></tr>
+          <tr><td>Data folder (Windows)</td><td><code>%APPDATA%\LeanCut\</code></td></tr>
+          <tr><td>Running from source</td><td><code>workspace/</code> in the project folder</td></tr>
+          <tr><td>Whisper models</td><td><code>~/.cache/huggingface/hub/</code> (shared with other apps)</td></tr>
+          <tr><td>Language models</td><td>Managed by Ollama or LM Studio</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Inside the data folder: <code>settings.json</code> holds your settings; <code>projects/&lt;id&gt;/project.json</code> holds each project's clips, transcripts and edit, with its exports in <code>projects/&lt;id&gt;/output</code> unless you chose another export folder; <code>cache/</code> holds extracted audio, keyframe measurements and rendered parts (safe to delete; it is rebuilt when needed); <code>media/</code> holds clips you dragged in. Set the <code>LEANCUT_HOME</code> environment variable to use a different folder. Removing a clip only deletes copies LeanCut made itself, never your original footage. Projects from v0.1 are moved into this layout automatically the first time v0.2 starts.</p>
+
+    <h2 id="developers">For developers</h2>
+    <p>LeanCut is open source under the MIT license. Start with <a href="https://github.com/lucerowb/leancut/blob/main/CONTRIBUTING.md">CONTRIBUTING.md</a> and <a href="https://github.com/lucerowb/leancut/blob/main/ARCHITECTURE.md">ARCHITECTURE.md</a>.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>File</th><th>Responsibility</th></tr></thead>
+        <tbody>
+          <tr><td><code>desktop.py</code></td><td>Native window (pywebview) around the backend, file and folder pickers; PyInstaller entry point</td></tr>
+          <tr><td><code>app.py</code></td><td>FastAPI server, projects and settings, background jobs with cancel, the analyze and export pipelines</td></tr>
+          <tr><td><code>transcriber.py</code></td><td>faster-whisper with VAD, GPU→CPU fallback, sentences, fragment merging, retakes and markers</td></tr>
+          <tr><td><code>llm_agent.py</code></td><td>Ollama / OpenAI-compatible streaming client, memory check, scoring, budget selection, YouTube metadata</td></tr>
+          <tr><td><code>media_analysis.py</code></td><td>Scenic B-roll, loud moments, audio sync, thumbnails, Shorts windows, ride-throughs</td></tr>
+          <tr><td><code>video_engine.py</code></td><td>FFmpeg: probing, audio extraction, cached and cancellable rendering, hardware encoders, audio finishing</td></tr>
+          <tr><td><code>exporters.py</code></td><td>Timecode maths, EDL, FCPXML, OpenTimelineIO, SRT and the YouTube text file</td></tr>
+          <tr><td><code>updates.py</code></td><td>The anonymous GitHub release check</td></tr>
+          <tr><td><code>static/</code></td><td>The UI: plain HTML, CSS and JavaScript, no build step</td></tr>
+        </tbody>
+      </table>
+    </div>
+<pre><code>pip install -r requirements.txt -r requirements-dev.txt
+python -m pytest -q tests   # unit tests
+python build.py             # dist/LeanCut.app + .dmg, or dist/LeanCut + .zip on Windows</code></pre>
+    <p>CI runs the tests on macOS and Windows for every push and pull request. Pushing a <code>v*</code> tag builds both apps and attaches them to a GitHub Release; when signing secrets are configured, the macOS app is signed and notarized and the Windows exe is signed.</p>
+
+    <h2 id="roadmap">Roadmap</h2>
+    <p>Version 0.2 shipped the whole first roadmap. What's next, picked from what riders ask for and what similar tools offer:</p>
+    <div class="road">
+      <h3><span class="tag">Next up</span></h3>
+      <div><b>Camera chapter auto-join</b><span>Treat GoPro and DJI split files as one continuous recording, so moments across the 4 GB boundary survive.</span></div>
+      <div><b>J-cuts and crossfades</b><span>Let the next line's audio start a moment early and blend the ambient sound at every cut.</span></div>
+      <div><b>Learns your taste</b><span>Feed the lines you re-tick or untick back into the prompt as examples, so the cut gets more like yours over time.</span></div>
+      <div><b>Profanity bleep</b><span>Word-level timestamps plus a word list, muted or bleeped for advertiser-friendly uploads.</span></div>
+
+      <h3><span class="tag">For riders</span></h3>
+      <div><b>Telemetry highlights</b><span>Read GoPro GPS and accelerometer data to find twisties, hard braking and summits, and skip motorways and red lights.</span></div>
+      <div><b>Neural speech enhancement</b><span>A small on-device model (DeepFilterNet) to lift your voice out of engine rumble.</span></div>
+      <div><b>Face and plate blur</b><span>Blur faces and licence plates from public roads before you publish.</span></div>
+      <div><b>Gyro stabilisation</b><span>Hand helmet and chest-cam footage to Gyroflow for horizon lock.</span></div>
+
+      <h3><span class="tag">For editors</span></h3>
+      <div><b>Search by what's on screen</b><span>Find “lake”, “hairpin” or “sunset” across all footage with an on-device image model, and use it to rate B-roll.</span></div>
+      <div><b>Subject-tracking Shorts</b><span>Keep the rider or the view in frame instead of a centre crop.</span></div>
+      <div><b>Signed builds and in-app updates</b><span>Notarized macOS and signed Windows releases that update themselves.</span></div>
+      <div><b>Linux build</b><span>The code already runs on Linux; it needs packaging and testing.</span></div>
+    </div>
+
+    <h2 id="faq">FAQ</h2>
+    <h3>Does LeanCut upload my footage?</h3>
+    <p>No. Audio, transcripts and video stay on your computer. Network traffic is limited to downloading Whisper models from Hugging Face, the language-model server you choose (on your own computer by default), and the optional update check.</p>
+    <h3>Does it keep scenic riding shots without talking?</h3>
+    <p>Yes, since v0.2. Scenic B-roll fills a share of the video (15% by default) with the most interesting silent footage. Turn it off or change the share in Settings › Rider AI.</p>
+    <h3>Can I use a cloud model instead?</h3>
+    <p>Any OpenAI-compatible endpoint works through the LM Studio option, but your transcript text would then leave your machine, which defeats the point of LeanCut.</p>
+    <h3>Does the export lose quality?</h3>
+    <p>Fast mode copies the original video stream untouched. Frame-accurate mode re-encodes at CRF 18 in software, or at about 0.12 bits per pixel with a hardware encoder; both look clean on YouTube.</p>
+    <h3>What does it cost?</h3>
+    <p>Nothing. LeanCut and all the models it uses are free to run.</p>
+  </main>
+</div>
+
+<footer>
+  <div class="wrap">
+    <span>LeanCut · local AI video editing for vloggers · MIT License</span>
+    <nav aria-label="Footer">
+      <a href="guide.html">Guide</a>
+      <a href="changelog.html">Changelog</a>
+      <a href="privacy.html">Privacy</a>
+      <a href="terms.html">Terms</a>
+      <a href="https://github.com/lucerowb/leancut">GitHub</a>
+      <a href="https://github.com/lucerowb/leancut/blob/main/LICENSE">License</a>
+    </nav>
+  </div>
+</footer>
+</body>
+</html>

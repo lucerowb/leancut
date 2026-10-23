@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Privacy policy — LeanCut</title>
+<meta name="description" content="LeanCut collects no data. Your footage, audio, transcripts and exports never leave your computer.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,62..125,400..900;1,62..125,400..900&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/site.css">
+<style>
+.doc td:first-child { font-weight: 700; }
+</style>
+</head>
+<body class="docs">
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="top bar">
+  <div class="wrap">
+    <a class="brand" href="index.html" aria-label="LeanCut home">
+      <svg viewBox="0 0 64 64" aria-hidden="true"><rect x="2" y="2" width="60" height="60" rx="14" fill="#12151c"/><rect x="16" y="17" width="32" height="3" rx="1.5" fill="#3a4050"/><rect x="16" y="44" width="32" height="3" rx="1.5" fill="#3a4050"/><polygon points="17.6,38 26.4,25.6 46.4,25.6 37.6,38" fill="#2fbf71"/><rect x="31" y="13.5" width="2" height="36" rx="1" fill="#4f8cff"/><polygon points="28.8,13 35.2,13 32,16.8" fill="#4f8cff"/></svg>
+      LeanCut <small>Legal</small>
+    </a>
+    <nav aria-label="Main">
+      <a href="index.html#how">Features</a>
+      <a href="guide.html">Guide</a>
+      <a href="changelog.html">Changelog</a>
+      <a href="privacy.html" aria-current="page">Privacy</a>
+      <a href="https://github.com/lucerowb/leancut">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<div class="wrap layout">
+  <aside class="toc" aria-label="On this page">
+    <p>On this page</p>
+    <ol>
+      <li><a href="#summary">Summary</a></li>
+      <li><a href="#collect">What we collect</a></li>
+      <li><a href="#on-device">Data on your computer</a></li>
+      <li><a href="#network">Network activity</a></li>
+      <li><a href="#llm">Your language-model server</a></li>
+      <li><a href="#third-parties">Third parties</a></li>
+      <li><a href="#website">This website</a></li>
+      <li><a href="#children">Children</a></li>
+      <li><a href="#changes">Changes</a></li>
+      <li><a href="#contact">Contact</a></li>
+    </ol>
+  </aside>
+
+  <main id="main" class="doc">
+    <h1>Privacy policy</h1>
+    <p class="lede">In one sentence: LeanCut never sends your footage, audio, transcripts or exports anywhere; they stay on your computer. The few network requests it does make are listed below.</p>
+    <p class="updated">Last updated: 23 October 2026</p>
+
+    <h2 id="summary">Summary</h2>
+    <div class="table-wrap">
+      <table>
+        <tbody>
+          <tr><td>Personal data collected by us</td><td>None</td></tr>
+          <tr><td>Analytics, telemetry, crash reporting, ads</td><td>None</td></tr>
+          <tr><td>Accounts</td><td>None; there's nothing to sign up for</td></tr>
+          <tr><td>Servers operated by us</td><td>None</td></tr>
+          <tr><td>Where your footage goes</td><td>Nowhere. It's read where it sits on your drive.</td></tr>
+          <tr><td>Network requests</td><td>Whisper model downloads from Hugging Face, your own language-model server, and an optional update check against GitHub (<a href="#network">details</a>)</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>LeanCut is open-source software published by its contributors ("we", "us"). You can check every claim on this page in the <a href="https://github.com/lucerowb/leancut">source code</a>.</p>
+
+    <h2 id="collect">What we collect</h2>
+    <p><b>Nothing.</b> We don't run any servers, and the app has no analytics, telemetry, crash reporting or advertising. We don't receive your footage, transcripts, file names, device identifiers, IP address or usage information, and we have no way to.</p>
+
+    <h2 id="on-device">Data stored on your computer</h2>
+    <p>To work, LeanCut stores the following <b>locally</b>, in its data folder. None of it leaves your computer.</p>
+    <ul>
+      <li><b><code>project.json</code>:</b> your clip list (file names and paths), the transcripts with their scores and reasons, which lines are kept, and your settings.</li>
+      <li><b>Audio cache (<code>cache/</code>):</b> audio extracted from your clips for transcription.</li>
+      <li><b>Copied clips (<code>media/</code>):</b> clips you dragged onto the app. Clips you pick with the file picker are used where they are and never copied.</li>
+      <li><b>Exports (<code>output/</code>):</b> the rendered video and edit lists.</li>
+      <li><b><code>leancut.log</code>:</b> a log of what the desktop app did, which can include clip names, folder paths and error messages.</li>
+    </ul>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>What</th><th>Location</th></tr></thead>
+        <tbody>
+          <tr><td>Data folder (macOS)</td><td><code>~/Library/Application Support/LeanCut</code></td></tr>
+          <tr><td>Data folder (Windows)</td><td><code>%APPDATA%\LeanCut</code></td></tr>
+          <tr><td>Running from source</td><td><code>workspace/</code> in the project folder, or <code>LEANCUT_HOME</code> if set</td></tr>
+          <tr><td>Whisper models</td><td><code>~/.cache/huggingface</code></td></tr>
+          <tr><td>Language models</td><td>Managed by Ollama or LM Studio</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>To remove everything, quit LeanCut and delete its data folder. Removing a clip inside the app only deletes copies LeanCut made itself, never your original footage. Whisper models stay in <code>~/.cache/huggingface</code> until you delete them, since other apps can share them.</p>
+
+    <h2 id="network">Network activity</h2>
+    <p>LeanCut makes exactly three kinds of network request:</p>
+    <ul>
+      <li><b>Whisper model download:</b> the first time you use a Whisper model (or click <b>Download</b> in Settings › Models), it's downloaded once from Hugging Face (<code>huggingface.co</code>). After that LeanCut loads the copy on your disk without contacting Hugging Face. A custom model you enter by repo id is fetched the same way. These requests ask for model files only; nothing about your footage is sent. Hugging Face sees your IP address, as with any download.</li>
+      <li><b>Your language-model server:</b> to score a transcript, LeanCut sends the transcript text to the server you set as <b>Base URL</b>. By default that is Ollama (<code>http://localhost:11434</code>) or LM Studio (<code>http://localhost:1234</code>) on your own computer, so the text never leaves it. See <a href="#llm">below</a> if you change it.</li>
+      <li><b>Update check (optional):</b> when LeanCut starts, and when you click <b>Check now</b>, it sends one anonymous request to <code>https://api.github.com/repos/lucerowb/leancut/releases/latest</code> to see whether a newer version exists. Nothing about you, your computer or your footage is in it. GitHub sees your IP address, as with any web request (<a href="https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement">GitHub's privacy statement</a>). Turn it off in <b>Settings › Updates</b>.</li>
+    </ul>
+    <p>The app's own interface talks to its backend over <code>127.0.0.1</code>, which never leaves your computer, and the backend refuses requests from any other website. After the Whisper model is downloaded, LeanCut works fully offline.</p>
+
+    <h2 id="llm">Your language-model server</h2>
+    <p>LeanCut doesn't ship a language model or contact any AI provider by itself. It talks to whichever server you configure. If you point the base URL at a server on another machine or at a cloud provider, <b>your transcript text is sent there</b> and is handled under that provider's terms and privacy policy, not this one. Your video and audio are never sent, only the transcript text.</p>
+
+    <h2 id="third-parties">Third parties</h2>
+    <ul>
+      <li><b>Hugging Face</b> hosts the Whisper models (<a href="https://huggingface.co/privacy">Hugging Face privacy policy</a>).</li>
+      <li><b>GitHub</b> answers the optional update check and hosts releases and this website.</li>
+      <li><b>Ollama, LM Studio</b> or any other server you choose runs the language model under its own terms.</li>
+      <li><b>FFmpeg, Silero VAD and faster-whisper</b> run entirely on your computer and contact no one.</li>
+    </ul>
+    <p>We don't sell, share or transfer any data, because we don't receive any.</p>
+
+    <h2 id="website">This website</h2>
+    <p>This site is hosted on GitHub Pages and loads its fonts from Google Fonts (<code>fonts.googleapis.com</code> and <code>fonts.gstatic.com</code>), so <b>Google receives your IP address</b> when you visit, and GitHub may log technical data such as your IP address. See the <a href="https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement">GitHub privacy statement</a> and the <a href="https://policies.google.com/privacy">Google privacy policy</a>. The site itself uses no cookies or analytics.</p>
+
+    <h2 id="children">Children</h2>
+    <p>We don't collect personal information from anyone, including children under 13. The app has no accounts and no content directed at children.</p>
+
+    <h2 id="changes">Changes to this policy</h2>
+    <p>If the app's data handling ever changes, we'll update this page and the "Last updated" date before releasing that change. The full history is in the <a href="https://github.com/lucerowb/leancut/commits/main/docs/privacy.html">repository</a>.</p>
+
+    <h2 id="contact">Contact</h2>
+    <p>Questions about privacy? <a href="https://github.com/lucerowb/leancut/issues">Open an issue</a> on GitHub. Report security concerns privately through GitHub's <a href="https://github.com/lucerowb/leancut/security/advisories/new">private vulnerability reporting</a> (the repository's <b>Security</b> tab › <b>Report a vulnerability</b>).</p>
+  </main>
+</div>
+
+<footer>
+  <div class="wrap">
+    <span>LeanCut · local AI video editing for vloggers · MIT License</span>
+    <nav aria-label="Footer">
+      <a href="guide.html">Guide</a>
+      <a href="changelog.html">Changelog</a>
+      <a href="privacy.html">Privacy</a>
+      <a href="terms.html">Terms</a>
+      <a href="https://github.com/lucerowb/leancut">GitHub</a>
+      <a href="https://github.com/lucerowb/leancut/blob/main/LICENSE">License</a>
+    </nav>
+  </div>
+</footer>
+</body>
+</html>

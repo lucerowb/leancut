@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Terms of use — LeanCut</title>
+<meta name="description" content="LeanCut is free, open-source software under the MIT License. What that means when you use it.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,62..125,400..900;1,62..125,400..900&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/site.css">
+<style>
+.doc td:first-child { font-weight: 700; }
+</style>
+</head>
+<body class="docs">
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="top bar">
+  <div class="wrap">
+    <a class="brand" href="index.html" aria-label="LeanCut home">
+      <svg viewBox="0 0 64 64" aria-hidden="true"><rect x="2" y="2" width="60" height="60" rx="14" fill="#12151c"/><rect x="16" y="17" width="32" height="3" rx="1.5" fill="#3a4050"/><rect x="16" y="44" width="32" height="3" rx="1.5" fill="#3a4050"/><polygon points="17.6,38 26.4,25.6 46.4,25.6 37.6,38" fill="#2fbf71"/><rect x="31" y="13.5" width="2" height="36" rx="1" fill="#4f8cff"/><polygon points="28.8,13 35.2,13 32,16.8" fill="#4f8cff"/></svg>
+      LeanCut <small>Legal</small>
+    </a>
+    <nav aria-label="Main">
+      <a href="index.html#how">Features</a>
+      <a href="guide.html">Guide</a>
+      <a href="changelog.html">Changelog</a>
+      <a href="privacy.html">Privacy</a>
+      <a href="https://github.com/lucerowb/leancut">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<div class="wrap layout">
+  <aside class="toc" aria-label="On this page">
+    <p>On this page</p>
+    <ol>
+      <li><a href="#acceptance">Acceptance</a></li>
+      <li><a href="#license">License</a></li>
+      <li><a href="#your-content">Your content</a></li>
+      <li><a href="#responsibilities">Your responsibilities</a></li>
+      <li><a href="#third-party">Third-party software &amp; models</a></li>
+      <li><a href="#ai-output">AI decisions</a></li>
+      <li><a href="#warranty">No warranty</a></li>
+      <li><a href="#liability">Limitation of liability</a></li>
+      <li><a href="#builds">Unsigned builds</a></li>
+      <li><a href="#trademarks">Trademarks</a></li>
+      <li><a href="#changes">Changes</a></li>
+    </ol>
+  </aside>
+
+  <main id="main" class="doc">
+    <h1>Terms of use</h1>
+    <p class="lede">LeanCut is free, open-source software. These terms explain what that means when you use it.</p>
+    <p class="updated">Last updated: 23 October 2026</p>
+
+    <h2 id="acceptance">Acceptance</h2>
+    <p>By downloading, building, installing or using LeanCut ("the app"), you agree to these terms. If you don't agree, don't use the app.</p>
+
+    <h2 id="license">License</h2>
+    <p>The app's source code is released under the <a href="https://github.com/lucerowb/leancut/blob/main/LICENSE">MIT License</a>. You may use, copy, modify and distribute it for any purpose, including commercially, as long as the copyright and license notice are kept. If these terms ever conflict with the MIT License, the MIT License wins for the software itself.</p>
+    <p>The app costs nothing, and there's no account, subscription or in-app purchase.</p>
+
+    <h2 id="your-content">Your content</h2>
+    <p>Your footage, transcripts and edits stay yours. The app processes them on your computer, and the project's contributors never receive or access them. See the <a href="privacy.html">privacy policy</a>.</p>
+
+    <h2 id="responsibilities">Your responsibilities</h2>
+    <ul>
+      <li>Only edit and publish footage you have the right to use, including any music, people or places recorded in it.</li>
+      <li>Respect the privacy of people you film and follow the laws that apply to recording and publishing them where you live and where you filmed.</li>
+      <li>Follow the terms of the platforms you publish to, such as YouTube.</li>
+      <li>Follow the licences of the models and tools you use with LeanCut (see below).</li>
+      <li>If you point LeanCut at a remote or cloud language-model server, you're responsible for what that provider does with your transcript text.</li>
+    </ul>
+
+    <h2 id="third-party">Third-party software &amp; models</h2>
+    <p>LeanCut builds on other people's work, each under its own licence. You're responsible for following the licences of the models you download and run:</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Component</th><th>Licence</th></tr></thead>
+        <tbody>
+          <tr><td>Whisper models</td><td>MIT (OpenAI), downloaded from Hugging Face</td></tr>
+          <tr><td>faster-whisper</td><td>MIT</td></tr>
+          <tr><td>Silero VAD</td><td>MIT</td></tr>
+          <tr><td>FFmpeg</td><td>GPL v2 or later. The apps bundle FFmpeg 7.1 through <code>imageio-ffmpeg</code>, built with <code>--enable-gpl</code> (x264, x265). It runs as a separate program; its source is available from <a href="https://ffmpeg.org">ffmpeg.org</a>. See <a href="https://github.com/lucerowb/leancut/blob/main/THIRD_PARTY_NOTICES.md">third-party notices</a>.</td></tr>
+          <tr><td>Language models</td><td>Each model you pull into Ollama or LM Studio has its own licence (for example Apache 2.0, the Llama Community License or the Gemma Terms of Use). Check it before you use the model, especially for commercial work.</td></tr>
+          <tr><td>Ollama, LM Studio</td><td>Separate apps you install yourself, under their own terms</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h2 id="ai-output">AI decisions</h2>
+    <p>LeanCut uses speech recognition and a language model to suggest what to keep. Transcripts can be wrong and the model's choices can miss the moment that matters. <b>Review the cut before you publish it.</b> You decide what goes into your video.</p>
+
+    <h2 id="warranty">No warranty</h2>
+    <p>THE APP IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. We don't promise that the app will be error-free, uninterrupted, compatible with every computer, camera or file format, or free of data loss.</p>
+    <p>LeanCut never modifies your original clips, but keep a backup of footage you can't afford to lose.</p>
+
+    <h2 id="liability">Limitation of liability</h2>
+    <p>TO THE MAXIMUM EXTENT PERMITTED BY LAW, IN NO EVENT SHALL THE AUTHORS, CONTRIBUTORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, INCLUDING LOSS OF DATA OR FOOTAGE, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE APP OR ITS USE. Some jurisdictions don't allow certain limitations; in those places, liability is limited to the smallest amount the law allows.</p>
+
+    <h2 id="builds">Unsigned builds</h2>
+    <p>The macOS and Windows builds aren't notarised or code-signed by a paid Apple or Microsoft certificate yet, so your operating system warns you the first time you open them. Download releases only from the <a href="https://github.com/lucerowb/leancut/releases">official GitHub repository</a>; we're not responsible for modified copies distributed elsewhere.</p>
+
+    <h2 id="trademarks">Trademarks</h2>
+    <p>LeanCut is an independent project and isn't affiliated with, endorsed by or sponsored by Google, OpenAI, Apple, Microsoft, Blackmagic Design, Adobe, Ollama or LM Studio. YouTube is a trademark of Google LLC. macOS is a trademark of Apple Inc. Windows is a trademark of Microsoft Corporation. DaVinci Resolve is a trademark of Blackmagic Design Pty Ltd. Premiere Pro is a trademark of Adobe Inc.</p>
+
+    <h2 id="changes">Changes to these terms</h2>
+    <p>We may update these terms. Changes are published on this page with a new "Last updated" date, and the full history is in the <a href="https://github.com/lucerowb/leancut/commits/main/docs/terms.html">repository</a>. Continuing to use the app after a change means you accept the updated terms.</p>
+    <p>Questions? <a href="https://github.com/lucerowb/leancut/issues">Open an issue</a> on GitHub.</p>
+  </main>
+</div>
+
+<footer>
+  <div class="wrap">
+    <span>LeanCut · local AI video editing for vloggers · MIT License</span>
+    <nav aria-label="Footer">
+      <a href="guide.html">Guide</a>
+      <a href="changelog.html">Changelog</a>
+      <a href="privacy.html">Privacy</a>
+      <a href="terms.html">Terms</a>
+      <a href="https://github.com/lucerowb/leancut">GitHub</a>
+      <a href="https://github.com/lucerowb/leancut/blob/main/LICENSE">License</a>
+    </nav>
+  </div>
+</footer>
+</body>
+</html>

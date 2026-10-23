@@ -9,42 +9,13 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,62..125,400..900;1,62..125,400..900&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/site.css">
 <style>
-/* Layout: one road-like column; the hero IS the product (a timeline going from raw to cut), sections stack below it. */
-:root {
-  --bg: #14171c; --surface: #1b1f26; --line: #2a303a; --fg: #e8eaee; --muted: #9099a8;
-  --paint: #f2b33d; --keep: #2fbf71; --head: #4f8cff; --cut: #352c33; --raw: #3b4250;
-  --display: "Archivo", "Arial Narrow", system-ui, sans-serif;
-  --body: "Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", sans-serif;
-  --mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
-  color-scheme: dark;
-}
-@media (prefers-color-scheme: light) {
-  :root:not([data-theme="dark"]) {
-    --bg: #eef0f3; --surface: #ffffff; --line: #d5d9e0; --fg: #171a20; --muted: #586172;
-    --paint: #a96d00; --keep: #1c8f52; --head: #2f6fe0; --cut: #eadfe3; --raw: #c3c9d3; color-scheme: light;
-  }
-}
-:root[data-theme="light"] {
-  --bg: #eef0f3; --surface: #ffffff; --line: #d5d9e0; --fg: #171a20; --muted: #586172;
-  --paint: #a96d00; --keep: #1c8f52; --head: #2f6fe0; --cut: #eadfe3; --raw: #c3c9d3; color-scheme: light;
-}
-* { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--fg); font: 17px/1.6 var(--body); }
-a { color: inherit; }
-a:focus-visible, button:focus-visible { outline: 2px solid var(--head); outline-offset: 3px; }
-.wrap { max-width: 1120px; margin: 0 auto; padding-left: max(20px, env(safe-area-inset-left, 0px)); padding-right: max(20px, env(safe-area-inset-right, 0px)); }
+/* Layout: one road-like column; the hero IS the product (a timeline going from raw to cut), sections stack below it.
+   Shared tokens, nav, buttons, tables and footer live in assets/site.css. */
 .lean { font-family: var(--display); font-style: italic; font-weight: 850; font-stretch: 125%; letter-spacing: -0.01em; line-height: 1.02; text-wrap: balance; }
 .eyebrow { font: 600 12px/1 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--paint); }
-.muted { color: var(--muted); }
-code, .mono { font-family: var(--mono); font-size: .88em; }
-
-/* nav */
-nav.top { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-block: 20px; }
-.brand { display: flex; align-items: center; gap: 10px; text-decoration: none; font-family: var(--display); font-style: italic; font-weight: 850; font-stretch: 112%; font-size: 22px; }
-.brand svg { width: 34px; height: 34px; }
-nav.top .links { display: flex; gap: 22px; font-size: 15px; }
-nav.top .links a { text-decoration: none; color: var(--muted); } nav.top .links a:hover { color: var(--fg); }
 
 /* hero */
 .hero { display: grid; gap: 40px; padding-block: 40px 72px; }
@@ -52,9 +23,7 @@ nav.top .links a { text-decoration: none; color: var(--muted); } nav.top .links 
 .hero h1 span { color: var(--paint); }
 .hero p.lede { max-width: 58ch; font-size: 19px; margin: 22px 0 0; color: var(--muted); }
 .ctas { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 28px; }
-.btn { display: inline-flex; align-items: center; gap: 8px; padding: 13px 20px; border-radius: 8px; text-decoration: none; font-weight: 700; font-size: 16px; border: 1px solid var(--line); background: var(--surface); }
-.btn.primary { background: var(--paint); color: #17130a; border-color: var(--paint); }
-.btn:hover { border-color: var(--paint); }
+.hero > div { min-width: 0; }
 
 /* the timeline demo */
 .deck { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 22px; overflow: hidden; min-width: 0; }
@@ -67,6 +36,7 @@ nav.top .links a { text-decoration: none; color: var(--muted); } nav.top .links 
 .lane { position: relative; height: 26px; border-radius: 5px; background: var(--cut); overflow: hidden; }
 .lane i { position: absolute; top: 0; bottom: 0; background: var(--raw); }
 .lane i.k { background: var(--keep); }
+.lane i.b { background: var(--paint); }
 .playhead { position: absolute; top: -8px; bottom: -8px; left: 124px; width: 2px; background: var(--head); box-shadow: 0 0 0 1px color-mix(in srgb, var(--head) 30%, transparent); animation: sweep 9s linear infinite; }
 .playhead::before { content: ""; position: absolute; top: -2px; left: -6px; border: 7px solid transparent; border-top-color: var(--head); }
 @keyframes sweep { from { left: 124px; } to { left: 100%; } }
@@ -98,28 +68,32 @@ section > .wrap > p.intro { max-width: 62ch; color: var(--muted); margin: 0 0 36
 pre.edl { margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px; overflow-x: auto; font: 13px/1.7 var(--mono); color: var(--muted); }
 pre.edl b { color: var(--fg); font-weight: 600; } pre.edl em { color: var(--keep); font-style: normal; }
 
-.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; }
-table { border-collapse: collapse; width: 100%; font-size: 15px; font-variant-numeric: tabular-nums; }
-th, td { text-align: left; padding: 12px 16px; border-bottom: 1px solid var(--line); vertical-align: top; }
-th { font: 600 12px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); background: var(--surface); }
-tr:last-child td { border-bottom: none; }
 td .mono { white-space: nowrap; }
 
+.features { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 26px 32px; margin: 0; padding: 0; list-style: none; }
+.features li { min-width: 0; }
+.features b { display: block; font-size: 17px; margin-bottom: 4px; }
+.features span { color: var(--muted); font-size: 15.5px; }
+.features .tag { display: inline-block; font: 600 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--paint); margin-bottom: 6px; }
+.shots { display: grid; grid-template-columns: 1.4fr 1fr; gap: 18px; }
+.shots figure { margin: 0; min-width: 0; }
+.shots figure:first-child { grid-row: span 2; }
+.shots img { width: 100%; height: auto; display: block; border-radius: 10px; border: 1px solid var(--line); }
+.shots figcaption { color: var(--muted); font-size: 14px; margin-top: 8px; }
+.formats { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 18px; padding: 0; list-style: none; }
+.formats li { font: 12px var(--mono); border: 1px solid var(--line); border-radius: 4px; padding: 3px 8px; }
 .roadmap { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 28px; }
 .roadmap h3 { font: 800 18px var(--display); font-stretch: 112%; margin: 0 0 10px; }
 .roadmap ul { margin: 0; padding-left: 18px; color: var(--muted); display: grid; gap: 6px; font-size: 15.5px; }
 
-footer { border-top: 1px solid var(--line); padding-block: 36px 48px; color: var(--muted); font-size: 14px; }
-footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 16px; }
-
 @media (max-width: 860px) {
   .steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .split, .roadmap { grid-template-columns: minmax(0, 1fr); }
-  nav.top .links a.hide-sm { display: none; }
+  .split, .roadmap, .shots { grid-template-columns: minmax(0, 1fr); }
+  .features { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 520px) {
   body { font-size: 16px; }
-  .steps { grid-template-columns: minmax(0, 1fr); }
+  .steps, .features { grid-template-columns: minmax(0, 1fr); }
   .lane-row { grid-template-columns: 1fr; gap: 4px; }
   .playhead { display: none; }
   .line { grid-template-columns: 60px 1fr; }
@@ -132,36 +106,41 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
 </head>
 <body>
 
-<div class="wrap">
-  <nav class="top" aria-label="Main">
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="top">
+  <div class="wrap">
     <a class="brand" href="index.html" aria-label="LeanCut home">
       <svg viewBox="0 0 64 64" aria-hidden="true"><rect x="2" y="2" width="60" height="60" rx="14" fill="#12151c"/><rect x="16" y="17" width="32" height="3" rx="1.5" fill="#3a4050"/><rect x="16" y="44" width="32" height="3" rx="1.5" fill="#3a4050"/><polygon points="17.6,38 26.4,25.6 46.4,25.6 37.6,38" fill="#2fbf71"/><rect x="31" y="13.5" width="2" height="36" rx="1" fill="#4f8cff"/><polygon points="28.8,13 35.2,13 32,16.8" fill="#4f8cff"/></svg>
       LeanCut
     </a>
-    <div class="links">
-      <a href="#how" class="hide-sm">How it works</a>
-      <a href="#hardware" class="hide-sm">Hardware</a>
-      <a href="docs.html">Docs</a>
-    </div>
-  </nav>
-</div>
+    <nav aria-label="Main">
+      <a href="index.html#how">Features</a>
+      <a href="guide.html">Guide</a>
+      <a href="changelog.html">Changelog</a>
+      <a href="privacy.html">Privacy</a>
+      <a href="https://github.com/lucerowb/leancut">GitHub</a>
+    </nav>
+  </div>
+</header>
 
-<header class="wrap hero">
+<main id="main">
+<div class="wrap hero">
   <div>
     <div class="eyebrow">Local AI video editor · macOS &amp; Windows</div>
     <h1 class="lean">Ride all day.<br><span>Cut it before dinner.</span></h1>
     <p class="lede">LeanCut listens to hours of helmet-cam and vlog footage, transcribes it, lets an AI model on your own computer pick the moments worth keeping, and renders the cut. Your footage never leaves the machine.</p>
     <div class="ctas">
-      <a class="btn primary" href="docs.html#install">Install for macOS</a>
-      <a class="btn" href="docs.html#install">Install for Windows</a>
-      <a class="btn" href="docs.html">Read the docs</a>
+      <a class="btn primary" href="https://github.com/lucerowb/leancut/releases/latest">Install for macOS</a>
+      <a class="btn" href="https://github.com/lucerowb/leancut/releases/latest">Install for Windows</a>
+      <a class="btn" href="guide.html#install">Read the guide</a>
     </div>
   </div>
 
   <div class="deck" aria-label="Example: three raw clips trimmed to a final cut">
     <div class="deck-head">
-      <span>3 clips · <b>22:32</b> raw · 11:06 of talking</span>
-      <span class="arrow">→ 9:42 cut · 98 cuts · 0 bytes uploaded</span>
+      <span>3 clips · <b>22:32</b> raw 4K · 11:06 of talking</span>
+      <span class="arrow">→ 12:12 cut · 104 cuts · 0 bytes uploaded</span>
     </div>
     <div class="lanes" id="lanes">
       <div class="lane-row"><span class="name">ride_01.MP4</span><div class="lane" data-dur="429"></div></div>
@@ -171,6 +150,7 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
     </div>
     <div class="legend">
       <span style="--c: var(--keep)">Kept by the AI</span>
+      <span style="--c: var(--paint)">Scenic B-roll</span>
       <span style="--c: var(--raw)">Speech it cut</span>
       <span style="--c: var(--cut)">Silence, wind &amp; engine noise</span>
     </div>
@@ -180,7 +160,7 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
       <div class="line"><span class="t">00:13.8</span><span class="s">★4</span><span class="txt">Oh wow, look at that view.<span class="why">genuine reaction</span></span></div>
     </div>
   </div>
-</header>
+</div>
 
 <section id="how">
   <div class="wrap">
@@ -190,9 +170,46 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
     <ol class="steps">
       <li><h3>Listen</h3><p>Pulls the audio out of every clip and drops silence, wind roar and engine drone with voice-activity detection.</p><span class="tool">FFmpeg + Silero VAD</span></li>
       <li><h3>Transcribe</h3><p>Turns the talking into timecoded sentences. Works in 99 languages and can translate to English as it goes.</p><span class="tool">faster-whisper</span></li>
-      <li><h3>Judge</h3><p>A local language model scores every line from 1 to 5. LeanCut keeps the best lines until your target length is reached.</p><span class="tool">Ollama · LM Studio</span></li>
-      <li><h3>Cut</h3><p>Stitches the kept lines into one video and writes an EDL so you can finish in your usual editor.</p><span class="tool">MP4 + CMX3600 EDL</span></li>
+      <li><h3>Judge</h3><p>A local language model scores every line from 1 to 5. Retakes, loud reactions and your spoken “clip that” markers count too. LeanCut keeps the best until your target length is reached.</p><span class="tool">Ollama · LM Studio</span></li>
+      <li><h3>Cut</h3><p>Stitches the kept lines and the best silent scenery into one loudness-matched video, plus files to finish in your usual editor.</p><span class="tool">MP4 · SRT · EDL · FCPXML · OTIO</span></li>
     </ol>
+  </div>
+</section>
+
+<section id="features">
+  <div class="wrap">
+    <div class="eyebrow">Built for riders</div>
+    <h2 class="lean">Everything a long ride needs</h2>
+    <p class="intro">Talking-head editors throw away everything without words. LeanCut knows a ride is more than talk.</p>
+    <ul class="features">
+      <li><span class="tag">Rides</span><b>Scenic B-roll keeper</b><span>Silent stretches are scored for movement, colour and exposure; the best views stay in, at a share you choose.</span></li>
+      <li><span class="tag">Rides</span><b>Say “clip that”</b><span>Shout a marker phrase mid-ride and the 30 seconds before it are kept. The command itself is cut.</span></li>
+      <li><span class="tag">Rides</span><b>Loud-moment boost</b><span>Shouts, laughs and revs that jump above the road noise lift the score of what was said there.</span></li>
+      <li><span class="tag">Rides</span><b>Ride-through fast-forward</b><span>Long dropped stretches can become a few seconds of time-lapse instead of a jump cut.</span></li>
+      <li><span class="tag">Edit</span><b>Retakes handled</b><span>When you say a line twice, the earlier take goes. Whisper's repeat loops are cleaned up too.</span></li>
+      <li><span class="tag">Edit</span><b>Drag to trim</b><span>Every kept block has handles on the timeline. Tick, untick and preview any line.</span></li>
+      <li><span class="tag">Publish</span><b>Chapters, title &amp; tags</b><span>A YouTube-ready description with valid chapters, written from what actually happens.</span></li>
+      <li><span class="tag">Publish</span><b>Subtitles &amp; Shorts</b><span>An .srt timed to the cut, and vertical 9:16 Shorts from the best continuous moments.</span></li>
+      <li><span class="tag">Publish</span><b>Thumbnail picks</b><span>The sharpest, best-exposed frames from the top-scored moments, saved as JPEGs.</span></li>
+      <li><span class="tag">Sound</span><b>YouTube loudness</b><span>Two-pass normalisation to −14 LUFS, optional wind and road-noise reduction, and click-free cuts.</span></li>
+      <li><span class="tag">Sound</span><b>Music that ducks</b><span>Pick a track and it loops under the video, dipping whenever someone speaks.</span></li>
+      <li><span class="tag">Speed</span><b>Hardware encoding, resumable</b><span>VideoToolbox or NVENC with GPU decoding. Cancel any time; a re-export reuses finished parts (28 s instead of 9 min in our 4K test).</span></li>
+      <li><span class="tag">Workflow</span><b>Projects &amp; overnight batch</b><span>Keep every trip as its own project and process a whole week of rides while you sleep.</span></li>
+      <li><span class="tag">Workflow</span><b>Second-camera sync</b><span>Line up a chest cam or phone with your helmet cam by their audio; the angle rides along into your editor.</span></li>
+      <li><span class="tag">Workflow</span><b>Updates without tracking</b><span>One anonymous check against GitHub tells you when a new version is out. You can turn it off.</span></li>
+    </ul>
+  </div>
+</section>
+
+<section id="screens">
+  <div class="wrap">
+    <div class="eyebrow">See it</div>
+    <h2 class="lean">One window, from raw ride to upload</h2>
+    <div class="shots">
+      <figure><img src="assets/screens/editor.png" width="1440" height="1180" loading="lazy" alt="LeanCut editor: clip list, preview, model settings, processing log and a timeline with kept lines in green and scenic B-roll in amber"><figcaption>The editor: AI decisions on the timeline, every line scored with a reason.</figcaption></figure>
+      <figure><img src="assets/screens/settings.png" width="1440" height="1180" loading="lazy" alt="LeanCut settings: updates, export destination and formats, video encoder, audio, rider AI and models"><figcaption>Settings: export destination and formats, audio, encoder, rider AI and updates.</figcaption></figure>
+      <figure><img src="assets/screens/projects.png" width="1440" height="1180" loading="lazy" alt="LeanCut projects list with an overnight batch panel"><figcaption>Projects and the overnight batch queue.</figcaption></figure>
+    </div>
   </div>
 </section>
 
@@ -209,17 +226,18 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
       </ul>
     </div>
     <div>
-      <div class="eyebrow">Finish in Resolve or Premiere</div>
-      <h2 class="lean">An EDL comes with every cut</h2>
-<pre class="edl" aria-label="Excerpt of an exported EDL"><b>TITLE: final_youtube_cut</b>
-FCM: NON-DROP FRAME
+      <div class="eyebrow">Finish in Resolve, Premiere or Final Cut</div>
+      <h2 class="lean">Hand the cut to your editor</h2>
+      <ul class="formats"><li>EDL</li><li>FCPXML</li><li>OpenTimelineIO</li><li>SRT</li></ul>
+<pre class="edl" aria-label="Excerpt of an exported EDL"><b>TITLE: Mountain pass, day 1</b>
+FCM: DROP FRAME
 
-<b>001</b>  AX  AA/V  C  00:00:05:20 00:00:11:06 <em>01:00:00:00 01:00:05:16</em>
+<b>001</b>  AX  AA/V  C  21:01:27;18 21:01:33;03 <em>01:00:00;00 01:00:05;15</em>
 * FROM CLIP NAME: ride_01.MP4
 
-<b>002</b>  AX  AA/V  C  00:00:11:28 00:00:25:08 <em>01:00:05:16 01:00:18:26</em>
+<b>002</b>  AX  AA/V  C  21:01:33;26 21:01:46;12 <em>01:00:05;15 01:00:18;01</em>
 * FROM CLIP NAME: ride_01.MP4</pre>
-      <p class="muted">Import it as a timeline and it relinks to your original clips, so you can add music, B-roll and color without redoing the cut.</p>
+      <p class="muted">Source times follow each camera's own timecode (DJI and GoPro write time of day), so clips land on the right frames. FCPXML adds chapter markers and a synced second angle.</p>
     </div>
   </div>
 </section>
@@ -249,18 +267,26 @@ FCM: NON-DROP FRAME
     <div class="eyebrow">Roadmap</div>
     <h2 class="lean">Where LeanCut is heading</h2>
     <div class="roadmap">
-      <div><h3>Next up</h3><ul><li>Subtitles (.srt) from the transcript</li><li>YouTube loudness (−14 LUFS) on export</li><li>Hardware encoding for 4K (VideoToolbox, NVENC)</li><li>Cancel and resume long jobs</li></ul></div>
-      <div><h3>For riders</h3><ul><li>Keep silent scenic B-roll, not just talking</li><li>Wind-noise reduction on the final audio</li><li>Auto chapters, title and description</li><li>Vertical Shorts from the top-scored moments</li></ul></div>
-      <div><h3>For editors</h3><ul><li>Drag cut edges on the timeline</li><li>FCPXML and OpenTimelineIO export</li><li>Multi-camera sync by audio</li><li>Several projects side by side</li></ul></div>
+      <div><h3>Next up</h3><ul><li>Auto-join camera chapter files (GoPro, DJI)</li><li>J-cuts and crossfades at every cut</li><li>Learns your taste from the lines you re-tick</li><li>Profanity bleep</li></ul></div>
+      <div><h3>For riders</h3><ul><li>GPS speed and g-force highlights from GoPro telemetry</li><li>Neural speech enhancement for engine rumble</li><li>Face and licence-plate blur</li><li>Gyro stabilisation via Gyroflow</li></ul></div>
+      <div><h3>For editors</h3><ul><li>Search your footage by what's in it (“lake”, “hairpin”)</li><li>Signed, notarized builds with in-app updates</li><li>Whisper models tuned for Nepali, Hindi and more</li><li>Linux build</li></ul></div>
     </div>
-    <p style="margin-top:28px"><a href="docs.html#roadmap">See the full roadmap in the docs →</a></p>
+    <p style="margin-top:28px"><a href="guide.html#roadmap">See the full roadmap in the guide →</a></p>
   </div>
 </section>
+</main>
 
 <footer>
   <div class="wrap">
-    <span>LeanCut · local AI video editing for vloggers</span>
-    <span><a href="docs.html">Docs</a> · <a href="docs.html#troubleshooting">Troubleshooting</a> · <a href="docs.html#faq">FAQ</a></span>
+    <span>LeanCut · local AI video editing for vloggers · MIT License</span>
+    <nav aria-label="Footer">
+      <a href="guide.html">Guide</a>
+      <a href="changelog.html">Changelog</a>
+      <a href="privacy.html">Privacy</a>
+      <a href="terms.html">Terms</a>
+      <a href="https://github.com/lucerowb/leancut">GitHub</a>
+      <a href="https://github.com/lucerowb/leancut/blob/main/LICENSE">License</a>
+    </nav>
   </div>
 </footer>
 
@@ -274,7 +300,9 @@ document.querySelectorAll(".lane").forEach((lane) => {
   while (t < dur - 4) {
     const len = 3 + rnd() * 14;
     html += `<i class="${rnd() < 0.78 ? "k" : ""}" style="left:${(t / dur) * 100}%;width:${(Math.min(len, dur - t) / dur) * 100}%"></i>`;
-    t += len + rnd() * 18;
+    const gap = rnd() * 18;
+    if (gap > 13) html += `<i class="b" style="left:${((t + len + 3) / dur) * 100}%;width:${(5 / dur) * 100}%"></i>`;
+    t += len + gap;
   }
   lane.innerHTML = html;
 });

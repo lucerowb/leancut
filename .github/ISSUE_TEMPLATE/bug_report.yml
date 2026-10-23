@@ -1,0 +1,57 @@
+name: Bug report
+description: An edit fails, crashes, or gives a wrong result
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! Please don't attach footage or transcripts you don't want public. For security issues, use [private reporting](https://github.com/lucerowb/leancut/security/advisories/new) instead.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: LeanCut version
+      description: Or the commit, if you run from source.
+      placeholder: v0.1.0
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system and hardware
+      placeholder: macOS 26.1, M5 Pro, 24 GB · or Windows 11, RTX 4070, 32 GB
+    validations:
+      required: true
+  - type: input
+    id: whisper
+    attributes:
+      label: Whisper model and spoken language
+      placeholder: large-v3-turbo, auto-detect
+    validations:
+      required: true
+  - type: input
+    id: llm
+    attributes:
+      label: LLM server and model
+      placeholder: Ollama 0.12, qwen2.5:7b · or LM Studio, Qwen 2.5 7B Instruct Q4
+    validations:
+      required: true
+  - type: input
+    id: footage
+    attributes:
+      label: Footage format and resolution
+      description: Container, codec, resolution and frame rate, plus the render mode you used.
+      placeholder: .MP4, HEVC, 3840x2160 at 29.97 fps, frame-accurate
+  - type: textarea
+    id: log
+    attributes:
+      label: Relevant lines from leancut.log
+      description: |
+        The desktop app writes `leancut.log` to `~/Library/Application Support/LeanCut` (macOS) or `%APPDATA%\LeanCut` (Windows). From source, copy the Processing log or terminal output instead. Remove anything private, such as file paths or transcript text.
+      render: text

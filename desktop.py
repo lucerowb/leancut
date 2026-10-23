@@ -21,6 +21,7 @@ if getattr(sys, "frozen", False):
     sys.stdout = sys.stderr = open(app.WORK / "leancut.log", "a", buffering=1, encoding="utf-8")
 
 VIDEO_TYPES = ("Video files (*.mp4;*.mov;*.mkv;*.MP4;*.MOV;*.MKV)",)
+AUDIO_TYPES = ("Audio files (*.mp3;*.m4a;*.wav;*.aac;*.flac;*.ogg)",)
 
 
 class Api:
@@ -29,6 +30,14 @@ class Api:
     def pick_files(self):
         paths = webview.windows[0].create_file_dialog(webview.FileDialog.OPEN, allow_multiple=True, file_types=VIDEO_TYPES)
         return [p for p in paths or [] if os.path.splitext(p)[1].lower() in video_engine.VIDEO_EXTS]
+
+    def pick_folder(self):
+        paths = webview.windows[0].create_file_dialog(webview.FileDialog.FOLDER)
+        return paths[0] if paths else None
+
+    def pick_audio(self):
+        paths = webview.windows[0].create_file_dialog(webview.FileDialog.OPEN, file_types=AUDIO_TYPES)
+        return paths[0] if paths else None
 
 
 def _free_port():

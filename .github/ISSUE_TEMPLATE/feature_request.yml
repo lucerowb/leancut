@@ -1,0 +1,26 @@
+name: Feature request
+description: Suggest an improvement
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Check the [roadmap](https://lucerowb.github.io/leancut/guide.html#roadmap) first; your idea may already be planned.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+      description: Describe your footage and what you're trying to get out of it.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like to happen?
+  - type: checkboxes
+    id: local
+    attributes:
+      label: Local check
+      options:
+        - label: This works without uploading footage, audio or transcripts to a cloud service, and without an account.
+          required: true

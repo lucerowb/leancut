@@ -4,7 +4,15 @@
     {
       "name": "lucero",
       "runtimeExecutable": ".venv/bin/python",
-      "runtimeArgs": ["-m", "uvicorn", "app:api", "--host", "127.0.0.1", "--port", "8765"],
+      "runtimeArgs": [
+        "-m",
+        "uvicorn",
+        "app:api",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "8765"
+      ],
       "port": 8765
     }
   ]

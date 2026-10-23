@@ -1,69 +1,97 @@
-# LeanCut — local AI video editor
+<div align="center">
 
-Turns hours of raw moto-vlog / daily-vlog footage into a tight YouTube cut, using only AI that runs on your machine.
+<img src="assets/icon.png" width="96" alt="LeanCut icon">
+
+# LeanCut
+
+**Turn hours of moto-vlog and daily-vlog footage into a tight YouTube cut, with AI that runs entirely on your computer.**
+
+[![CI](https://github.com/lucerowb/leancut/actions/workflows/ci.yml/badge.svg)](https://github.com/lucerowb/leancut/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-orange.svg)](LICENSE)
+![Platforms](https://img.shields.io/badge/macOS%20·%20Windows-informational)
+
+[Website](https://lucerowb.github.io/leancut/) · [User guide](https://lucerowb.github.io/leancut/guide.html) · [Download](https://github.com/lucerowb/leancut/releases/latest) · [Changelog](CHANGELOG.md) · [Architecture](ARCHITECTURE.md)
+
+<img src="docs/assets/screens/editor.png" width="820" alt="LeanCut editor with a scored transcript and a timeline of kept lines and scenic B-roll">
+
+</div>
+
+---
+
+LeanCut listens to your footage, transcribes it, lets a language model on your own machine score every line, keeps
+the best of it (plus the best silent scenery) up to the length you want, and renders the cut. Your footage, audio and
+transcripts never leave your computer, and there's no account, subscription or upload.
+
 Named after the lean angle through a corner, and a lean, tight edit.
 
-1. **Listen** — FFmpeg extracts 16 kHz mono audio (high-pass filter for wind rumble); Silero VAD drops silence, wind and engine noise.
-2. **Transcribe** — faster-whisper produces timecoded sentences (GPU when available, automatic CPU fallback). Short fragments are merged into whole thoughts.
-3. **Judge** — a local LLM (Ollama or LM Studio) scores every segment 1–5 with a reason; LeanCut's code then keeps the best segments up to your target length. Timestamps always come from Whisper, never the LLM.
-4. **Review** — timeline + transcript with scores; tick/untick any line, click to preview.
-5. **Cut** — `final_youtube_cut.mp4` plus a CMX3600 `final_youtube_cut.edl` for DaVinci Resolve / Premiere Pro.
+## Features
 
-Full user guide: [`site/docs.html`](site/docs.html). Landing page: [`site/index.html`](site/index.html).
+- **AI edit, fully local.** faster-whisper transcribes; Ollama or LM Studio scores every line 1–5 with a reason; LeanCut's code keeps the best lines up to your target length. Timestamps always come from Whisper, never the LLM.
+- **Built for rides:**
+  - **Scenic B-roll keeper.** Silent stretches are scored for movement, colour and exposure; the best views fill a share you choose.
+  - **Say "clip that".** A spoken marker keeps the 30 seconds before it; the command itself is cut.
+  - **Loud moments.** Shouts, laughs and revs above the road noise lift a line's score.
+  - **Ride-through fast-forwards** over long dropped stretches (optional).
+- **Smarter cuts.** Retakes are detected (the earlier take goes), Whisper's repeat loops are cleaned up, fragments become whole thoughts, and every cut gets a 30 ms fade so it doesn't click.
+- **Review before export.** A timeline and a scored transcript: tick, untick, preview, and drag the edges of any kept block to trim it.
+- **Publish-ready output:** the MP4 at −14 LUFS, subtitles (`.srt`), a YouTube title, description, tags and valid chapters, six thumbnail picks, and vertical Shorts.
+- **Finish in your editor.** EDL (Resolve, Premiere), FCPXML (Final Cut, Resolve) and OpenTimelineIO, on each camera's own timecode (drop-frame aware).
+- **Sound.** Optional wind and road-noise reduction, and a music bed that ducks under speech.
+- **Fast and resumable.** Hardware encoding (VideoToolbox, NVENC, Quick Sync, AMF) with GPU decoding. Cancel any time; a re-export reuses finished parts (28 s instead of 9 min in our 4K test).
+- **Projects and an overnight batch queue**, plus **second-camera sync** by audio for multi-angle edits.
+- **Settings page** for export destination and file names, formats, encoder, audio, rider AI, models and updates.
+- **Update alerts.** One anonymous request to GitHub tells you when a new version is out. Turn it off in Settings › Updates.
+- **No analytics, ads or accounts.** See the [privacy policy](https://lucerowb.github.io/leancut/privacy.html).
 
-## Desktop app (macOS & Windows)
+## Download
 
-Download `LeanCut-macOS.dmg` or `LeanCut-Windows.zip` from Releases (built by CI on every `v*` tag), or build it yourself:
+| Platform | File | Notes |
+|---|---|---|
+| macOS (Apple Silicon) | `LeanCut-macOS.dmg` | Drag LeanCut to Applications. Builds are unsigned for now: the first time, right-click → **Open**. |
+| Windows 10/11 (64-bit) | `LeanCut-Windows.zip` | Extract and run `LeanCut.exe`. SmartScreen: **More info → Run anyway**. Needs the WebView2 runtime (built into Windows 11). |
 
-```bash
-python3.12 -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -r requirements.txt -r requirements-build.txt
-python build.py        # macOS: dist/LeanCut.app + dist/LeanCut-macOS.dmg · Windows: dist/LeanCut/ + dist/LeanCut-Windows.zip
-```
+Get them from [Releases](https://github.com/lucerowb/leancut/releases/latest). You also need a local language-model
+server: [Ollama](https://ollama.com) (`ollama pull qwen2.5:7b`) or LM Studio (load a model → Developer → Start Server).
+Pick a model that fits your memory; the [guide](https://lucerowb.github.io/leancut/guide.html#models) has a table.
 
-PyInstaller can't cross-compile; `.github/workflows/build.yml` builds both OSes on GitHub Actions and attaches them to the release.
-Builds are unsigned: first launch needs right-click → Open on macOS, or More info → Run anyway on Windows.
+## Screenshots
+
+<p>
+  <img src="docs/assets/screens/settings.png" width="400" alt="Settings: updates, export destination and formats, video, audio, rider AI, models">
+  <img src="docs/assets/screens/projects.png" width="400" alt="Projects and the overnight batch">
+</p>
 
 ## Run from source
 
-Requires **Python 3.10 – 3.12** (faster-whisper's CTranslate2/onnxruntime wheels lag behind newer Pythons).
+Requires **Python 3.10–3.12** (faster-whisper's CTranslate2 and onnxruntime wheels lag behind newer Pythons).
 
 ```bash
-pip install -r requirements.txt -r requirements-build.txt
-python desktop.py      # native window
-python app.py          # or browser UI at http://127.0.0.1:8765
-python -m pytest -q tests
-```
-
-You also need a local LLM server: [Ollama](https://ollama.com) (`ollama pull qwen2.5:7b`) or LM Studio (load a model → Developer → Start Server).
-Pick a model whose size is under ~75% of your RAM — LeanCut refuses bigger Ollama models because they swap and stall.
-
-## Project layout
-
-```
-desktop.py         native window (pywebview) around the backend; PyInstaller entry point
-app.py             FastAPI server, job runner, pipeline orchestration, project state
-transcriber.py     faster-whisper + VAD, GPU→CPU fallback, sentence split + fragment merge
-llm_agent.py       Ollama / OpenAI-compatible streaming client, memory check, scoring prompt, budget selection
-video_engine.py    FFmpeg probe, audio extraction, cut/concat render, CMX3600 EDL
-static/            app UI (HTML/JS/CSS, no build step)
-site/              landing page + docs (static, host anywhere e.g. GitHub Pages)
-assets/            app icon (assets/make_icon.py draws it)
-build.py           PyInstaller packaging (+ .dmg / .zip)
-tests/test_core.py unit tests
+python3.12 -m venv .venv && source .venv/bin/activate     # Windows: .venv\Scripts\activate
+pip install -r requirements.txt -r requirements-build.txt -r requirements-dev.txt
+python desktop.py          # native window
+python app.py              # or the browser UI at http://127.0.0.1:8765
+python -m pytest -q tests  # tests (no models or network needed)
+python build.py            # package: dist/LeanCut.app + .dmg, or dist/LeanCut + .zip on Windows
 ```
 
 Data lives in `workspace/` when running from source, and in `~/Library/Application Support/LeanCut` (macOS) or
-`%APPDATA%\LeanCut` (Windows) in the packaged app. `LEANCUT_HOME` overrides both. The desktop app logs to `leancut.log` there.
+`%APPDATA%\LeanCut` (Windows) in the packaged app. `LEANCUT_HOME` overrides both.
 
-## Known limits
+## How it works
 
-- Only talking is kept; silent scenic B-roll is dropped (top roadmap item).
-- Whisper is weak on some languages (e.g. Nepali): set *Spoken language* to English for a rough English transcript the LLM can judge.
-- EDL is non-drop-frame (29.97 fps written as 30), so it can drift ~1 frame per minute on 29.97 material.
-- Unsigned builds; Windows build is produced by CI and not yet tested on a real Windows machine.
+1. **Listen:** FFmpeg extracts 16 kHz mono audio; Silero VAD drops silence, wind and engine noise.
+2. **Transcribe:** faster-whisper (`large-v3-turbo` by default) writes timecoded sentences; GPU when available, CPU fallback.
+3. **Judge:** retakes, markers and loud moments are found in code; the local LLM scores the rest; `select()` fits the target length.
+4. **Cut:** kept lines and B-roll are rendered (cached, cancellable), finished to −14 LUFS, and exported with edit lists, subtitles and YouTube text.
 
-## Roadmap
+Details, including the security model and timecode handling, are in [ARCHITECTURE.md](ARCHITECTURE.md).
 
-See [`site/docs.html#roadmap`](site/docs.html#roadmap): subtitles, −14 LUFS loudness, hardware encoding, cancel/resume, scenic B-roll keeper,
-wind-noise reduction, Shorts, chapters/metadata, FCPXML/OTIO, multi-cam sync, music ducking, language-tuned Whisper, signed auto-updating builds.
+## Contributing
+
+Issues and pull requests are welcome; see [CONTRIBUTING.md](CONTRIBUTING.md). Please report security problems
+privately, as described in [SECURITY.md](SECURITY.md).
+
+## License
+
+[MIT](LICENSE). The packaged apps bundle FFmpeg (GPL v2 or later) and other open-source components; see
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
