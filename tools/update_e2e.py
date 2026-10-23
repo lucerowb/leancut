@@ -110,7 +110,8 @@ def child(args):
     print("install() ->", r, flush=True)
     if not r["restart"]:
         sys.exit(2)
-    script = Path(updates._helper[-1])
+    stage = Path(args.bundle).parent / ".leancut-update"  # Windows passes the helper as -EncodedCommand, not a path
+    script = stage / ("update.ps1" if sys.platform == "win32" else "update.sh")
     shutil.copy2(script, Path(args.logs) / script.name)  # the helper deletes itself; keep a copy for the logs
     updates.restart()
     print("restart(): helper started, app process exiting", flush=True)
