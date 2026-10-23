@@ -5,6 +5,7 @@ Install flow: download() the asset → install() stages the new app next to the 
 detached helper and the app exits; the helper waits for this process to end, swaps the folders by rename, relaunches,
 and only then deletes the old version. The user's data folder is never inside the app, so it is never touched.
 """
+import base64
 import json
 import os
 import re
@@ -135,8 +136,14 @@ def install(downloaded, on_log=print, bundle: Path | None = None) -> dict:
     except Exception:
         shutil.rmtree(stage, ignore_errors=True)
         raise
-    _helper[:] = (["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File",
-                   str(script)] if sys.platform == "win32" else ["/bin/sh", str(script)])
+    if sys.platform == "win32":
+        # -EncodedCommand, not -File: PowerShell 5.1 reads [ ] in a script's path as a wildcard and won't start it
+        # (an install folder such as "Apps [2]" would never update). UTF-16 also keeps non-ASCII paths intact.
+        code = base64.b64encode(script.read_text(encoding="utf-8-sig").encode("utf-16-le")).decode()
+        _helper[:] = ["powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+                      "-WindowStyle", "Hidden", "-EncodedCommand", code]
+    else:
+        _helper[:] = ["/bin/sh", str(script)]
     on_log(f"Update staged in {stage}.")
     return {"restart": True, "message": "The update is ready. Restart LeanCut to finish."}
 

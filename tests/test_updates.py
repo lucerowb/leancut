@@ -160,7 +160,14 @@ def test_install_stages_next_to_the_app(tmp_path, monkeypatch, platform):
     assert (stage / "LeanCut" / ("LeanCut.exe" if platform == "win32" else "LeanCut")).read_text() == "new"
     assert (bundle / ("LeanCut.exe" if platform == "win32" else "LeanCut")).read_text() == "old"  # untouched
     script = stage / ("update.ps1" if platform == "win32" else "update.sh")
-    assert str(script) in updates._helper and str(os.getpid()) in script.read_text(encoding="utf-8")
+    assert str(os.getpid()) in script.read_text(encoding="utf-8")
+    if platform == "win32":  # the script's text, not its path (PowerShell 5.1 reads [ ] in -File paths as wildcards)
+        import base64
+        assert "-File" not in updates._helper
+        code = updates._helper[updates._helper.index("-EncodedCommand") + 1]
+        assert base64.b64decode(code).decode("utf-16-le") == script.read_text(encoding="utf-8-sig")
+    else:
+        assert str(script) in updates._helper
     assert script.read_bytes().startswith(b"\xef\xbb\xbf") == (platform == "win32")  # PowerShell 5.1 needs the BOM
 
 
@@ -286,3 +293,4 @@ def test_release_workflow_publishes_every_update_asset():
     wf = (Path(__file__).resolve().parent.parent / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
     for name in updates.ASSETS.values():
         assert f"dist/{name}" in wf, name
+
