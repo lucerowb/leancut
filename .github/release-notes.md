@@ -42,4 +42,4 @@ Built for the whole ride, not just the talking. LeanCut is now open source.
 | macOS (Apple Silicon) | `LeanCut-macOS.dmg` | Open it and drag LeanCut to Applications. Unsigned: the first time, right-click → **Open**. |
 | Windows 10/11 (64-bit) | `LeanCut-Windows.zip` | Extract and run `LeanCut.exe`. SmartScreen: **More info → Run anyway**. |
 
-You also need [Ollama](https://ollama.com) or LM Studio with a model that fits your memory. See the [guide](https://lucerowb.github.io/leancut/guide.html).
+You also need [Ollama](https://ollama.com) or LM Studio with a model that fits your memory. See the [guide](https://leancut.lucerowb.com/guide.html).

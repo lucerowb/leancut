@@ -12,7 +12,7 @@ LeanCut is a desktop app with no accounts and no servers of its own. In short:
 
 - **The backend listens on `127.0.0.1` only.** The desktop app picks a free port at launch; `python app.py` uses port 8765. Neither is reachable from the network.
 - **Footage, audio, transcripts and exports stay on your computer.** LeanCut reads clips where they are and only deletes copies it made itself, never your originals.
-- **Outgoing network traffic is limited to three things:** the one-time Whisper model download from Hugging Face (cached models load offline), requests to the language-model server you configure (by default Ollama or LM Studio on `localhost`), and an optional update check against GitHub's public releases API that can be turned off in **Settings › Updates**. See the [privacy policy](https://lucerowb.github.io/leancut/privacy.html) for details.
+- **Outgoing network traffic is limited to three things:** the one-time Whisper model download from Hugging Face (cached models load offline), requests to the language-model server you configure (by default Ollama or LM Studio on `localhost`), and an optional update check against GitHub's public releases API that can be turned off in **Settings › Updates**. See the [privacy policy](https://leancut.lucerowb.com/privacy.html) for details.
 - **Language-model output is treated as untrusted.** The model only returns scores and reasons for transcript segments; timestamps always come from Whisper, and the files to cut are chosen by LeanCut's own code.
 - **Media is processed by FFmpeg**, bundled through `imageio-ffmpeg` when it isn't on your `PATH`. Malformed media files are handled by FFmpeg's own parsers.
 

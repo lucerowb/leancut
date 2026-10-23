@@ -10,7 +10,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-orange.svg)](LICENSE)
 ![Platforms](https://img.shields.io/badge/macOS%20·%20Windows-informational)
 
-[Website](https://lucerowb.github.io/leancut/) · [User guide](https://lucerowb.github.io/leancut/guide.html) · [Download](https://github.com/lucerowb/leancut/releases/latest) · [Changelog](CHANGELOG.md) · [Architecture](ARCHITECTURE.md)
+[Website](https://leancut.lucerowb.com/) · [User guide](https://leancut.lucerowb.com/guide.html) · [Download](https://github.com/lucerowb/leancut/releases/latest) · [Changelog](CHANGELOG.md) · [Architecture](ARCHITECTURE.md)
 
 <img src="docs/assets/screens/editor.png" width="820" alt="LeanCut editor with a scored transcript and a timeline of kept lines and scenic B-roll">
 
@@ -41,7 +41,7 @@ Named after the lean angle through a corner, and a lean, tight edit.
 - **Projects and an overnight batch queue**, plus **second-camera sync** by audio for multi-angle edits.
 - **Settings page** for export destination and file names, formats, encoder, audio, rider AI, models and updates.
 - **Update alerts.** One anonymous request to GitHub tells you when a new version is out. Turn it off in Settings › Updates.
-- **No analytics, ads or accounts.** See the [privacy policy](https://lucerowb.github.io/leancut/privacy.html).
+- **No analytics, ads or accounts.** See the [privacy policy](https://leancut.lucerowb.com/privacy.html).
 
 ## Download
 
@@ -52,7 +52,7 @@ Named after the lean angle through a corner, and a lean, tight edit.
 
 Get them from [Releases](https://github.com/lucerowb/leancut/releases/latest). You also need a local language-model
 server: [Ollama](https://ollama.com) (`ollama pull qwen2.5:7b`) or LM Studio (load a model → Developer → Start Server).
-Pick a model that fits your memory; the [guide](https://lucerowb.github.io/leancut/guide.html#models) has a table.
+Pick a model that fits your memory; the [guide](https://leancut.lucerowb.com/guide.html#models) has a table.
 
 ## Screenshots
 

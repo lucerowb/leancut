@@ -75,7 +75,7 @@ source time in EDL/FCPXML/OTIO is `clip start timecode + offset`, computed in fr
 - `/api/open-url` only opens `https://github.com/lucerowb/leancut/…` links.
 - Clips added by path are referenced, never moved; removing a clip only deletes copies LeanCut made.
 - Outgoing traffic: Whisper downloads (Hugging Face; cached models load offline), the configured LLM server, and the
-  optional anonymous update check. See the [privacy policy](https://lucerowb.github.io/leancut/privacy.html).
+  optional anonymous update check. See the [privacy policy](https://leancut.lucerowb.com/privacy.html).
 
 ## Storage
 
