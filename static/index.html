@@ -22,64 +22,160 @@
 <div id="updateBanner" class="banner hidden" role="status"></div>
 
 <main id="editor" class="page">
+  <div class="toolbar">
+    <label class="inline">Target <input id="target_length" placeholder="e.g. 10-15 min" aria-label="Target length"></label>
+    <button id="runBtn" class="primary">① Auto-edit with AI</button>
+    <button id="exportBtn" class="primary alt">② Export</button>
+    <span class="sep"></span>
+    <button id="undoBtn" title="Undo (⌘Z)" disabled>↶ Undo</button>
+    <button id="redoBtn" title="Redo (⇧⌘Z)" disabled>↷ Redo</button>
+    <span class="sep"></span>
+    <button id="previewBtn" title="Exact render of the edit at 540p, every effect baked in">Render preview</button>
+    <span class="grow"></span>
+    <span id="stepLabel" class="muted small">Idle</span>
+    <div class="bar mini"><div id="bar"></div></div>
+    <button id="cancelBtn" class="hidden">Cancel</button>
+  </div>
+
   <section class="panel library">
-    <h2>Media library</h2>
+    <h2>Media</h2>
     <label id="drop" class="drop">
       <input id="files" type="file" accept=".mp4,.mov,.mkv" multiple hidden>
-      Drop .mp4 / .mov / .mkv clips here or <u>browse</u>
-      <small id="dropHint">Uploads copy the file into the workspace</small>
+      Drop clips here or <u>browse</u>
+      <small id="dropHint">Uploads copy the file; camera chapters join automatically</small>
     </label>
     <form id="pathForm" class="row">
-      <input id="pathInput" placeholder="…or paste a local file path (no copy)" aria-label="Local file path">
+      <input id="pathInput" placeholder="…or paste a file path" aria-label="Local file path">
       <button>Add</button>
     </form>
     <ul id="clips"></ul>
   </section>
 
-  <section class="panel preview">
-    <video id="player" controls preload="metadata"></video>
-    <p id="nowPlaying" class="muted">Select a clip to preview</p>
-  </section>
-
-  <section class="panel config">
-    <h2>Models &amp; API</h2>
-    <label>Whisper model <select data-setting="whisper_size" id="whisper_size"></select></label>
-    <label>Spoken language <select data-setting="language" id="language"></select></label>
-    <label>LLM server
-      <select data-setting="provider" id="provider">
-        <option value="ollama">Ollama</option>
-        <option value="lmstudio">LM Studio / OpenAI-compatible</option>
-      </select>
-    </label>
-    <label>Base URL <input data-setting="base_url" id="base_url"></label>
-    <label>LLM model
-      <span class="row"><select data-setting="model" id="model"></select><button id="refreshModels" title="Refresh model list" aria-label="Refresh model list">↻</button></span>
-    </label>
-    <p id="llmStatus" class="muted small"></p>
-    <label>Target length <input id="target_length" placeholder="e.g. 10-15 minutes (optional)"></label>
-    <div class="actions">
-      <button id="runBtn" class="primary">① Auto-edit with AI</button>
-      <button id="exportBtn" class="primary alt">② Export</button>
+  <section class="panel monitor-panel">
+    <div class="monitor" id="monitor">
+      <video id="pv" playsinline preload="auto"></video>
+      <div class="ov vignette" id="ovVignette"></div>
+      <div class="ov texts" id="ovTexts"></div>
+      <div class="ov card hidden" id="ovCard"><b id="cardTitle"></b><span id="cardSub"></span></div>
+      <div class="ov dim" id="ovDim"></div>
+      <div class="ov empty" id="ovEmpty">Add clips and run the auto-edit to see your video here.</div>
     </div>
-    <p class="muted small">Export formats, destination and audio live in <a href="#" data-goto="settings">Settings</a>.</p>
+    <div class="transport">
+      <button id="playBtn" aria-label="Play">▶</button>
+      <span id="tc" class="tc">0:00.0 / 0:00.0</span>
+      <span class="grow"></span>
+      <span class="seg-toggle" role="group" aria-label="Preview mode">
+        <button id="modeInstant" class="on">Instant</button><button id="modeRendered" disabled title="Render a preview first">Rendered</button>
+      </span>
+    </div>
   </section>
 
-  <section class="panel console">
-    <div class="row between"><h2>Processing</h2><span><span id="stepLabel" class="muted">Idle</span> <button id="cancelBtn" class="hidden">Cancel</button></span></div>
-    <div class="bar"><div id="bar"></div></div>
-    <pre id="log" aria-live="polite"></pre>
-    <div id="result"></div>
+  <section class="panel assistant">
+    <div class="tabs2">
+      <button class="t2 on" data-pane="chat">Assistant</button>
+      <button class="t2" data-pane="sugg">Suggestions <span id="suggCount" class="pill">0</span></button>
+    </div>
+    <div class="pane" id="pane-chat">
+      <div id="chatLog" class="chatlog" aria-live="polite">
+        <p class="muted small">Tell me what to change, in your own words. For example:</p>
+      </div>
+      <div class="chips" id="chips">
+        <button>Make it about 8 minutes</button>
+        <button>Give it a warm cinematic look</button>
+        <button>Add an intro title for this ride</button>
+        <button>Slow down the biggest reaction</button>
+        <button>Use J-cuts everywhere</button>
+      </div>
+      <form id="chatForm" class="chatform">
+        <textarea id="chatInput" rows="2" placeholder="e.g. Cut the fuel stop, add a lower-third “Day 2 · Nagarkot” on the first line" aria-label="Instruction for the assistant"></textarea>
+        <button class="primary" id="chatSend">Send</button>
+      </form>
+    </div>
+    <div class="pane hidden" id="pane-sugg">
+      <div class="row wrap">
+        <button id="suggestBtn">Suggest again</button>
+        <button id="applyAllBtn">Apply all</button>
+      </div>
+      <div id="suggList" class="sugglist"></div>
+    </div>
   </section>
 
-  <section class="panel timeline">
+  <section class="panel tl-panel">
     <div class="row between">
-      <h2>Timeline &amp; transcript</h2>
-      <span id="summary" class="muted"></span>
+      <h2>Timeline</h2>
+      <span id="summary" class="muted small"></span>
+      <label class="inline small">Zoom <input type="range" id="zoom" min="1" max="12" value="1" step="0.5"></label>
     </div>
-    <p class="muted small"><span class="key k"></span> kept line · <span class="key b"></span> scenic B-roll · <span class="key"></span> cut.
-      Drag the edges of a kept block to trim it. Click text to preview; tick or untick to change the cut.</p>
-    <div id="tracks"></div>
-    <div id="transcript"></div>
+    <div class="timeline" id="timeline" tabindex="0" aria-label="Programme timeline">
+      <div class="ruler" id="ruler"></div>
+      <div class="track" data-track="V"><span class="tname">Picture</span><div class="lane" id="laneV"></div></div>
+      <div class="track" data-track="T"><span class="tname">Titles</span><div class="lane" id="laneT"></div></div>
+      <div class="track" data-track="A"><span class="tname">Voice</span><div class="lane" id="laneA"></div></div>
+      <div class="playhead" id="playhead"></div>
+    </div>
+    <p class="muted small">Click a part to edit it · Space play/pause · ←/→ previous/next part · Delete cuts the selected part · ⌘Z undo</p>
+  </section>
+
+  <section class="panel bottom">
+    <div class="tabs2">
+      <button class="t2 on" data-pane="insp">Inspector</button>
+      <button class="t2" data-pane="look">Look &amp; titles</button>
+      <button class="t2" data-pane="trans">Transcript</button>
+      <button class="t2" data-pane="search">Search footage</button>
+      <button class="t2" data-pane="log">Log</button>
+    </div>
+    <div class="pane" id="pane-insp"><p class="muted">Select a part on the timeline.</p></div>
+    <div class="pane hidden" id="pane-look">
+      <div class="lookgrid">
+        <fieldset>
+          <legend>Cuts</legend>
+          <label>Cut style <select id="cutStyle"></select></label>
+          <label>Length <input type="number" id="cutDur" min="0.1" max="2" step="0.1" value="0.4"> s</label>
+        </fieldset>
+        <fieldset>
+          <legend>Color</legend>
+          <label class="check"><input type="checkbox" id="autoGrade"> Auto color (balance every shot)</label>
+          <label>Look <select id="preset"></select></label>
+          <label>Exposure <input type="range" data-g="exposure" min="-1" max="1" step="0.05" value="0"></label>
+          <label>Contrast <input type="range" data-g="contrast" min="0.6" max="1.5" step="0.02" value="1"></label>
+          <label>Saturation <input type="range" data-g="saturation" min="0" max="2" step="0.05" value="1"></label>
+          <label>Temperature <input type="range" data-g="temperature" min="-1" max="1" step="0.05" value="0"></label>
+          <label>Vignette <input type="range" data-g="vignette" min="0" max="1" step="0.05" value="0"></label>
+          <label>LUT (.cube) <span class="row"><input id="lutPath" placeholder="optional"><button id="pickLut">Choose…</button></span></label>
+          <button id="resetGrade" class="small">Reset manual color</button>
+        </fieldset>
+        <fieldset>
+          <legend>Intro &amp; outro</legend>
+          <label>Intro title <input id="introTitle" placeholder="e.g. Mountain Pass"></label>
+          <label>Intro subtitle <input id="introSub" placeholder="e.g. Day 1 · 1,200 km to go"></label>
+          <label>Style <select id="introStyle"><option value="bold">Bold</option><option value="minimal">Minimal</option><option value="cinematic">Cinematic (letterbox)</option></select></label>
+          <label>Outro title <input id="outroTitle" placeholder="e.g. Thanks for riding along"></label>
+          <label>Outro subtitle <input id="outroSub" placeholder="e.g. Subscribe for day 2"></label>
+          <button id="saveCards" class="primary">Save intro &amp; outro</button>
+        </fieldset>
+        <fieldset>
+          <legend>Video-wide</legend>
+          <label class="check"><input type="checkbox" id="captions"> Burn in captions</label>
+          <label class="check"><input type="checkbox" id="privacy"> Blur faces &amp; licence plates</label>
+          <label>B-roll share <input type="range" id="brollShare" min="0" max="40" step="5"></label>
+          <label>Music volume <input type="range" id="musicVol" min="0" max="0.6" step="0.01"></label>
+        </fieldset>
+      </div>
+    </div>
+    <div class="pane hidden" id="pane-trans">
+      <p class="muted small"><span class="key k"></span> kept line · <span class="key b"></span> scenic B-roll · <span class="key"></span> cut. Drag edges to trim; tick to keep.</p>
+      <div id="tracks"></div>
+      <div id="transcript"></div>
+    </div>
+    <div class="pane hidden" id="pane-search">
+      <form id="searchForm" class="row"><input id="searchInput" placeholder="Find a shot: “lake”, “hairpin”, “sunset”, “friends laughing”" aria-label="Search footage"><button class="primary">Search</button></form>
+      <p class="muted small">On-device image search (CLIP). The first search indexes your footage once.</p>
+      <div id="searchResults" class="results"></div>
+    </div>
+    <div class="pane hidden" id="pane-log">
+      <pre id="log" aria-live="polite"></pre>
+      <div id="result"></div>
+    </div>
   </section>
 </main>
 
@@ -110,10 +206,36 @@
     <p>LeanCut <b id="version"></b> · <span id="updateStatus" class="muted">Not checked yet</span></p>
     <div class="row wrap">
       <button id="checkUpdate">Check now</button>
-      <button id="downloadUpdate" class="primary hidden">Download update</button>
+      <button id="installUpdate" class="primary hidden">Install update</button>
+      <button id="restartUpdate" class="primary hidden">Restart to finish</button>
+      <button id="downloadUpdate" class="hidden">Download</button>
       <label class="check"><input type="checkbox" data-setting="update_check"> Check for updates when LeanCut starts</label>
     </div>
     <p class="muted small">One anonymous request to GitHub's release page. Nothing about you or your footage is sent.</p>
+  </section>
+
+  <section class="panel">
+    <h2>AI models</h2>
+    <label>Whisper model <select data-setting="whisper_size" id="whisper_size"></select></label>
+    <label>Spoken language <select data-setting="language" id="language"></select></label>
+    <label>LLM server
+      <select data-setting="provider" id="provider">
+        <option value="ollama">Ollama</option>
+        <option value="lmstudio">LM Studio / OpenAI-compatible</option>
+      </select>
+    </label>
+    <label>Base URL <input data-setting="base_url" id="base_url"></label>
+    <label>LLM model <span class="row"><select data-setting="model" id="model"></select><button id="refreshModels" title="Refresh model list" aria-label="Refresh model list">↻</button></span></label>
+    <p id="llmStatus" class="muted small"></p>
+    <label>Scoring engine
+      <select data-setting="engine">
+        <option value="auto">Decision engine (token probabilities), batch if unsupported</option>
+        <option value="decision">Decision engine only</option>
+        <option value="batch">Batch (JSON lists)</option>
+      </select>
+    </label>
+    <label>Visual judge (vision model) <select data-setting="vision_model" id="vision_model"></select></label>
+    <p class="muted small">A small vision model such as <code>gemma3:4b</code> looks at B-roll candidates. Off when empty.</p>
   </section>
 
   <section class="panel">
@@ -122,19 +244,17 @@
       <span class="row"><input data-setting="output_dir" id="output_dir" placeholder="Project folder (default)"><button id="pickFolder">Choose…</button><button id="resetFolder" title="Use the project folder">Reset</button></span>
     </label>
     <p class="muted small">Default: <code id="defaultOutput"></code></p>
-    <label>File name
-      <input data-setting="output_name" placeholder="{project}">
-    </label>
-    <p class="muted small"><code>{project}</code> = project name, <code>{date}</code> = today. Example: <code>{project}_{date}</code></p>
+    <label>File name <input data-setting="output_name" placeholder="{project}"></label>
+    <p class="muted small"><code>{project}</code> = project name, <code>{date}</code> = today.</p>
     <h3>What to export</h3>
     <div class="checks">
       <label class="check"><input type="checkbox" data-setting="out_video"> Video (.mp4)</label>
       <label class="check"><input type="checkbox" data-setting="out_srt"> Subtitles (.srt)</label>
-      <label class="check"><input type="checkbox" data-setting="out_youtube"> Title, description, tags &amp; chapters (.txt)</label>
-      <label class="check"><input type="checkbox" data-setting="out_thumbs"> Thumbnail picks (.jpg)</label>
-      <label class="check"><input type="checkbox" data-setting="out_edl"> EDL (Resolve, Premiere)</label>
-      <label class="check"><input type="checkbox" data-setting="out_fcpxml"> FCPXML (Final Cut, Resolve)</label>
-      <label class="check"><input type="checkbox" data-setting="out_otio"> OpenTimelineIO (.otio)</label>
+      <label class="check"><input type="checkbox" data-setting="out_youtube"> Title, description &amp; chapters</label>
+      <label class="check"><input type="checkbox" data-setting="out_thumbs"> Thumbnail picks</label>
+      <label class="check"><input type="checkbox" data-setting="out_edl"> EDL</label>
+      <label class="check"><input type="checkbox" data-setting="out_fcpxml"> FCPXML</label>
+      <label class="check"><input type="checkbox" data-setting="out_otio"> OpenTimelineIO</label>
       <label class="check"><input type="checkbox" data-setting="out_shorts"> Vertical Shorts
         <select data-setting="shorts_count" aria-label="Number of Shorts"><option>1</option><option>2</option><option>3</option><option>5</option></select></label>
     </div>
@@ -145,7 +265,7 @@
     <label>Render mode
       <select data-setting="render_mode">
         <option value="accurate">Frame-accurate (re-encode)</option>
-        <option value="fast">Fast (stream copy, keyframe cuts)</option>
+        <option value="fast">Fast (stream copy, only without looks)</option>
       </select>
     </label>
     <label>Encoder
@@ -161,12 +281,37 @@
   <section class="panel">
     <h2>Audio</h2>
     <label class="check"><input type="checkbox" data-setting="loudness"> Normalise to YouTube loudness (−14 LUFS)</label>
-    <label class="check"><input type="checkbox" data-setting="denoise"> Reduce wind and road noise</label>
+    <label class="check"><input type="checkbox" data-setting="voice_enhance"> Neural voice enhancement (lift speech out of engine noise)</label>
+    <label class="check"><input type="checkbox" data-setting="denoise"> Reduce wind and road noise (filter)</label>
+    <label class="check"><input type="checkbox" data-setting="bleep"> Bleep profanity (and mask it in subtitles)</label>
+    <label>Extra words to bleep <input data-setting="profanity_words" placeholder="comma-separated"></label>
     <label>Background music (optional)
       <span class="row"><input data-setting="music_path" id="music_path" placeholder="Path to an .mp3 / .m4a / .wav"><button id="pickMusic">Choose…</button><button id="clearMusic">Clear</button></span>
     </label>
     <label>Music volume <input type="range" min="0.02" max="0.6" step="0.01" data-setting="music_volume"></label>
-    <p class="muted small">The music loops under the whole video and dips automatically whenever someone speaks.</p>
+  </section>
+
+  <section class="panel">
+    <h2>Voice (your cloned voice for voice-overs)</h2>
+    <p id="voiceStatus" class="muted small">Checking voice engines…</p>
+    <label>Engine
+      <select data-setting="tts_engine">
+        <option value="auto">Auto (best available)</option>
+        <option value="chatterbox">Chatterbox (local voice cloning)</option>
+        <option value="server">Voice server (OpenAI-compatible)</option>
+        <option value="system">System voice (no cloning)</option>
+      </select>
+    </label>
+    <label>Voice server URL <input data-setting="tts_server" placeholder="http://127.0.0.1:8880/v1"></label>
+    <label>Server voice name <input data-setting="tts_voice" placeholder="optional"></label>
+    <label class="check"><input type="checkbox" id="voiceConsent"> This is my own voice, or I have permission to clone it</label>
+    <div class="row wrap">
+      <button id="voiceFromProject">Use my voice from this project</button>
+      <button id="voicePick">Choose a voice sample…</button>
+    </div>
+    <p class="muted small">Current sample: <code id="voiceSample">none</code></p>
+    <form id="voiceTestForm" class="row"><input id="voiceTestText" placeholder="Type a line to hear it in your voice"><button>Hear it</button></form>
+    <audio id="voiceAudio" controls class="hidden"></audio>
   </section>
 
   <section class="panel">
@@ -174,18 +319,17 @@
     <label class="check"><input type="checkbox" data-setting="broll"> Keep scenic B-roll from silent stretches</label>
     <label>B-roll share of the video <span class="row"><input type="range" min="0" max="40" step="5" data-setting="broll_share" id="broll_share"><output id="brollShareOut"></output></span></label>
     <label class="check"><input type="checkbox" data-setting="moments"> Boost loud moments (shouts, laughs, revs)</label>
+    <label class="check"><input type="checkbox" data-setting="telemetry"> Use GoPro GPS telemetry (braking, twisties, summits; skip motorways)</label>
     <label class="check"><input type="checkbox" data-setting="connectors"> Fast-forward ride-throughs over long dropped stretches</label>
+    <label class="check"><input type="checkbox" data-setting="auto_join"> Join camera chapter files automatically</label>
     <label>Spoken markers <input data-setting="markers" placeholder="clip that, mark this"></label>
-    <p class="muted small">Say one of these while riding and LeanCut keeps the 30 seconds before it.</p>
+    <label>Blur <select data-setting="privacy_kinds"><option value="face,plate">Faces and licence plates</option><option value="face">Faces only</option><option value="plate">Licence plates only</option></select></label>
   </section>
 
   <section class="panel">
-    <h2>Models</h2>
+    <h2>Models on disk</h2>
     <ul id="whisperList" class="plain"></ul>
-    <label>Custom Whisper model (optional)
-      <input data-setting="custom_whisper" placeholder="Hugging Face repo id or local folder">
-    </label>
-    <p class="muted small">A CTranslate2 model, e.g. one fine-tuned for Nepali or Hindi. Overrides the size picked in the editor.</p>
+    <label>Custom Whisper model (optional) <input data-setting="custom_whisper" placeholder="Hugging Face repo id or local folder"></label>
     <p id="ffmpegStatus"></p>
     <button id="testLlm">Test LLM connection</button> <span id="setupLlm"></span>
     <p class="muted small">Data folder: <code id="dataDir"></code></p>

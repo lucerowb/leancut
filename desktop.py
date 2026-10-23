@@ -35,6 +35,10 @@ class Api:
         paths = webview.windows[0].create_file_dialog(webview.FileDialog.FOLDER)
         return paths[0] if paths else None
 
+    def pick_lut(self):
+        paths = webview.windows[0].create_file_dialog(webview.FileDialog.OPEN, file_types=("3D LUT (*.cube;*.3dl)",))
+        return paths[0] if paths else None
+
     def pick_audio(self):
         paths = webview.windows[0].create_file_dialog(webview.FileDialog.OPEN, file_types=AUDIO_TYPES)
         return paths[0] if paths else None
@@ -54,9 +58,14 @@ def main():
         time.sleep(0.05)
     webview.create_window(app.APP_NAME, f"http://127.0.0.1:{port}/", js_api=Api(),
                           width=1440, height=920, min_size=(900, 640), background_color="#0f1115")
-    webview.start()
+    if sys.platform.startswith("linux"):
+        # Qt WebEngine's sandbox is blocked by AppArmor on some distros (Ubuntu 24.04+); the page is our own local UI
+        os.environ.setdefault("QTWEBENGINE_DISABLE_SANDBOX", "1")
+    webview.start(gui="qt" if sys.platform.startswith("linux") else None)
     server.should_exit = True
 
 
 if __name__ == "__main__":
+    import multiprocessing
+    multiprocessing.freeze_support()  # frozen app: helper processes must not start a second LeanCut
     main()

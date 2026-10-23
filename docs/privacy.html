@@ -64,7 +64,7 @@
           <tr><td>Accounts</td><td>None; there's nothing to sign up for</td></tr>
           <tr><td>Servers operated by us</td><td>None</td></tr>
           <tr><td>Where your footage goes</td><td>Nowhere. It's read where it sits on your drive.</td></tr>
-          <tr><td>Network requests</td><td>Whisper model downloads from Hugging Face, your own language-model server, and an optional update check against GitHub (<a href="#network">details</a>)</td></tr>
+          <tr><td>Network requests</td><td>One-time model downloads (Hugging Face, GitHub), your own language-model and voice servers, and an optional update check and update download from GitHub (<a href="#network">details</a>)</td></tr>
         </tbody>
       </table>
     </div>
@@ -76,8 +76,12 @@
     <h2 id="on-device">Data stored on your computer</h2>
     <p>To work, LeanCut stores the following <b>locally</b>, in its data folder. None of it leaves your computer.</p>
     <ul>
-      <li><b><code>project.json</code>:</b> your clip list (file names and paths), the transcripts with their scores and reasons, which lines are kept, and your settings.</li>
-      <li><b>Audio cache (<code>cache/</code>):</b> audio extracted from your clips for transcription.</li>
+      <li><b><code>project.json</code>:</b> your clip list (file names and paths), the transcripts with their scores and reasons, which lines are kept, your edit (looks, titles, voice-over text), your conversation with the assistant and its suggestions.</li>
+      <li><b><code>settings.json</code>:</b> your settings.</li>
+      <li><b><code>taste.json</code>:</b> the text of up to 200 lines you kept or cut yourself, used as examples when scoring future edits.</li>
+      <li><b>Voice samples (<code>voices/</code>):</b> if you use <b>Use my voice from this project</b>, a short WAV of your own speech taken from your footage. A sample you pick yourself is used where it is.</li>
+      <li><b>Cache (<code>cache/</code>):</b> audio extracted from your clips, shot measurements, footage-search indexes, rendered parts and previews, and synthesised voice-over lines.</li>
+      <li><b>Models (<code>models/</code>):</b> the optional vision and voice-enhancement models, once downloaded.</li>
       <li><b>Copied clips (<code>media/</code>):</b> clips you dragged onto the app. Clips you pick with the file picker are used where they are and never copied.</li>
       <li><b>Exports (<code>output/</code>):</b> the rendered video and edit lists.</li>
       <li><b><code>leancut.log</code>:</b> a log of what the desktop app did, which can include clip names, folder paths and error messages.</li>
@@ -88,32 +92,35 @@
         <tbody>
           <tr><td>Data folder (macOS)</td><td><code>~/Library/Application Support/LeanCut</code></td></tr>
           <tr><td>Data folder (Windows)</td><td><code>%APPDATA%\LeanCut</code></td></tr>
+          <tr><td>Data folder (Linux)</td><td><code>~/.local/share/LeanCut</code></td></tr>
           <tr><td>Running from source</td><td><code>workspace/</code> in the project folder, or <code>LEANCUT_HOME</code> if set</td></tr>
-          <tr><td>Whisper models</td><td><code>~/.cache/huggingface</code></td></tr>
-          <tr><td>Language models</td><td>Managed by Ollama or LM Studio</td></tr>
+          <tr><td>Whisper models, Chatterbox voice model</td><td><code>~/.cache/huggingface</code></td></tr>
+          <tr><td>Language and vision models</td><td>Managed by Ollama or LM Studio</td></tr>
         </tbody>
       </table>
     </div>
     <p>To remove everything, quit LeanCut and delete its data folder. Removing a clip inside the app only deletes copies LeanCut made itself, never your original footage. Whisper models stay in <code>~/.cache/huggingface</code> until you delete them, since other apps can share them.</p>
 
     <h2 id="network">Network activity</h2>
-    <p>LeanCut makes exactly three kinds of network request:</p>
+    <p>LeanCut makes only these network requests:</p>
     <ul>
-      <li><b>Whisper model download:</b> the first time you use a Whisper model (or click <b>Download</b> in Settings › Models), it's downloaded once from Hugging Face (<code>huggingface.co</code>). After that LeanCut loads the copy on your disk without contacting Hugging Face. A custom model you enter by repo id is fetched the same way. These requests ask for model files only; nothing about your footage is sent. Hugging Face sees your IP address, as with any download.</li>
-      <li><b>Your language-model server:</b> to score a transcript, LeanCut sends the transcript text to the server you set as <b>Base URL</b>. By default that is Ollama (<code>http://localhost:11434</code>) or LM Studio (<code>http://localhost:1234</code>) on your own computer, so the text never leaves it. See <a href="#llm">below</a> if you change it.</li>
+      <li><b>Model downloads (once each):</b> the first time you use a Whisper model (or click <b>Download</b> in Settings › Models on disk), it's downloaded from Hugging Face (<code>huggingface.co</code>). Optional features download their own model the first time you use them: face and licence-plate detectors and the CLIP search model from Hugging Face, and the voice-enhancement model (DeepFilterNet3) from GitHub (<code>raw.githubusercontent.com</code>). If you installed voice cloning from source, the Chatterbox library downloads its model from Hugging Face too (see <a href="#third-parties">third parties</a>). After that LeanCut uses the copies on your disk without contacting anyone. These requests ask for model files only; nothing about your footage is sent. The host sees your IP address, as with any download.</li>
+      <li><b>Your language-model server:</b> to score a transcript, answer the assistant and write suggestions, LeanCut sends transcript text, a summary of your edit and your messages to the server you set as <b>Base URL</b>. If you choose a vision model for the visual judge, it also sends a few small still frames from your B-roll candidates to that server. By default that is Ollama (<code>http://localhost:11434</code>) or LM Studio (<code>http://localhost:1234</code>) on your own computer, so nothing leaves it. See <a href="#llm">below</a> if you change it.</li>
+      <li><b>Your voice server (optional):</b> if you choose the voice-server engine, the voice-over text and the path of your voice sample are sent to the URL you enter in Settings › Voice. <code>voice_server.py</code> runs on your own computer and only accepts local requests.</li>
       <li><b>Update check (optional):</b> when LeanCut starts, and when you click <b>Check now</b>, it sends one anonymous request to <code>https://api.github.com/repos/lucerowb/leancut/releases/latest</code> to see whether a newer version exists. Nothing about you, your computer or your footage is in it. GitHub sees your IP address, as with any web request (<a href="https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement">GitHub's privacy statement</a>). Turn it off in <b>Settings › Updates</b>.</li>
+      <li><b>Update download (only when you click Install):</b> the new version is downloaded from <code>github.com/lucerowb/leancut/releases</code>, which redirects to GitHub's file hosts (<code>objects.githubusercontent.com</code> or <code>release-assets.githubusercontent.com</code>). LeanCut refuses any other host.</li>
     </ul>
-    <p>The app's own interface talks to its backend over <code>127.0.0.1</code>, which never leaves your computer, and the backend refuses requests from any other website. After the Whisper model is downloaded, LeanCut works fully offline.</p>
+    <p>The app's own interface talks to its backend over <code>127.0.0.1</code>, which never leaves your computer, and the backend refuses requests from any other website. Once the models you use are downloaded, LeanCut works fully offline.</p>
 
     <h2 id="llm">Your language-model server</h2>
-    <p>LeanCut doesn't ship a language model or contact any AI provider by itself. It talks to whichever server you configure. If you point the base URL at a server on another machine or at a cloud provider, <b>your transcript text is sent there</b> and is handled under that provider's terms and privacy policy, not this one. Your video and audio are never sent, only the transcript text.</p>
+    <p>LeanCut doesn't ship a language model or contact any AI provider by itself. It talks to whichever server you configure. If you point the base URL at a server on another machine or at a cloud provider, <b>your transcript text, your assistant messages and, with a visual judge, a few still frames are sent there</b> and are handled under that provider's terms and privacy policy, not this one. Your video and audio files are never sent. The same applies to a voice server on another machine: it receives your voice-over text.</p>
 
     <h2 id="third-parties">Third parties</h2>
     <ul>
-      <li><b>Hugging Face</b> hosts the Whisper models (<a href="https://huggingface.co/privacy">Hugging Face privacy policy</a>).</li>
-      <li><b>GitHub</b> answers the optional update check and hosts releases and this website.</li>
+      <li><b>Hugging Face</b> hosts the Whisper, detector, CLIP and Chatterbox models (<a href="https://huggingface.co/privacy">Hugging Face privacy policy</a>).</li>
+      <li><b>GitHub</b> answers the optional update check, hosts releases, update downloads, the voice-enhancement model and this website.</li>
       <li><b>Ollama, LM Studio</b> or any other server you choose runs the language model under its own terms.</li>
-      <li><b>FFmpeg, Silero VAD and faster-whisper</b> run entirely on your computer and contact no one.</li>
+      <li><b>FFmpeg, Silero VAD, faster-whisper and ONNX Runtime</b> run entirely on your computer and contact no one. <b>Chatterbox</b> (voice cloning, only if you installed it) runs on your computer too, but it's a third-party library that fetches its model from Hugging Face itself and may check there for a newer model when it loads.</li>
     </ul>
     <p>We don't sell, share or transfer any data, because we don't receive any.</p>
 

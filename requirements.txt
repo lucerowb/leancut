@@ -3,3 +3,5 @@ uvicorn>=0.30
 python-multipart>=0.0.9
 faster-whisper>=1.1
 imageio-ffmpeg>=0.5  # bundled FFmpeg binary, used when ffmpeg is not on PATH
+numpy>=1.26
+onnxruntime>=1.17  # on-device vision (faces/plates/CLIP) and speech enhancement; also used by faster-whisper's VAD

@@ -227,19 +227,21 @@ def _srt_time(s):
     return f"{ms // 3600000:02d}:{ms // 60000 % 60:02d}:{ms // 1000 % 60:02d},{ms % 1000:03d}"
 
 
-def caption_cues(tl, max_chars=84):
-    """[(start, end, text)] on the output timeline from the kept speech, split into readable two-line cues."""
+def caption_cues(tl, max_chars=84, mask=None):
+    """[(start, end, text)] on the output timeline from the kept speech, split into readable two-line cues.
+    Entries may be slowed down or sped up (speed); silent fast-forwards carry no speech. mask: text -> text."""
     cues = []
     for e in tl:
-        if e["speed"] != 1:
+        if e.get("silent") or e["speed"] > 4:
             continue
+        sp = e["speed"]
         for s in e["clip"].get("segments") or []:
             mid = (s["start"] + s["end"]) / 2
             if not s.get("keep") or not e["start"] <= mid <= e["end"]:
                 continue
-            a = e["rec_start"] + max(s["start"], e["start"]) - e["start"]
-            b = e["rec_start"] + min(s["end"], e["end"]) - e["start"]
-            words, chunks, cur = s["text"].split(), [], ""
+            a = e["rec_start"] + (max(s["start"], e["start"]) - e["start"]) / sp
+            b = e["rec_start"] + (min(s["end"], e["end"]) - e["start"]) / sp
+            words, chunks, cur = (mask(s["text"]) if mask else s["text"]).split(), [], ""
             for w in words:
                 if cur and len(cur) + 1 + len(w) > max_chars:
                     chunks.append(cur)
@@ -256,9 +258,9 @@ def caption_cues(tl, max_chars=84):
     return cues
 
 
-def write_srt(tl, path):
+def write_srt(tl, path, mask=None):
     lines = []
-    for i, (a, b, text) in enumerate(caption_cues(tl), 1):
+    for i, (a, b, text) in enumerate(caption_cues(tl, mask=mask), 1):
         lines += [str(i), f"{_srt_time(a)} --> {_srt_time(b)}", text, ""]
     Path(path).write_text("\n".join(lines), encoding="utf-8")
     return Path(path)
@@ -268,11 +270,11 @@ def chapter_lines(tl):
     """[(record_seconds, text)] of the kept speech, for the LLM to place chapters on."""
     out = []
     for e in tl:
-        if e["speed"] != 1:
+        if e.get("silent") or e["speed"] > 4:
             continue
         for s in e["clip"].get("segments") or []:
             if s.get("keep") and e["start"] <= (s["start"] + s["end"]) / 2 <= e["end"]:
-                out.append((e["rec_start"] + max(s["start"], e["start"]) - e["start"], s["text"]))
+                out.append((e["rec_start"] + (max(s["start"], e["start"]) - e["start"]) / e["speed"], s["text"]))
     return out
 
 

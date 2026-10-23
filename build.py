@@ -5,6 +5,7 @@
 
 macOS   -> dist/LeanCut.app and dist/LeanCut-macOS.dmg
 Windows -> dist/LeanCut/LeanCut.exe and dist/LeanCut-Windows.zip
+Linux   -> dist/LeanCut/LeanCut and dist/LeanCut-Linux-x64.tar.gz (LeanCut/ with install.sh; needs pywebview[qt])
 PyInstaller cannot cross-compile: build each OS on that OS (see .github/workflows/release.yml).
 
 macOS signing: set LEANCUT_CODESIGN_IDENTITY (e.g. "Developer ID Application: Name (TEAMID)") to sign the app with
@@ -19,6 +20,7 @@ import sys
 from pathlib import Path
 
 import PyInstaller.__main__
+from PIL import Image
 
 ROOT = Path(__file__).parent
 DIST = ROOT / "dist"
@@ -39,6 +41,9 @@ PyInstaller.__main__.run([
     "--collect-all", "onnxruntime",
     "--collect-all", "imageio_ffmpeg",
     "--collect-submodules", "uvicorn",
+    # optional features app.py imports by name at runtime (PyInstaller can't see those imports)
+    *[a for m in ("telemetry", "vision", "enhance", "voice") for a in ("--hidden-import", m)],
+    "--collect-data", "tokenizers",
 ])
 
 if sys.platform == "darwin":
@@ -58,5 +63,12 @@ if sys.platform == "darwin":
     subprocess.run(["hdiutil", "create", "-volname", "LeanCut", "-srcfolder", str(app), "-ov", "-format", "UDZO",
                     str(dmg)], check=True)
     print("Built", dmg, "version", VERSION)
+elif sys.platform.startswith("linux"):
+    app = DIST / "LeanCut"
+    shutil.copy2(ROOT / "packaging" / "linux" / "leancut.desktop", app)
+    Image.open(ROOT / "assets" / "icon.png").resize((512, 512)).save(app / "leancut.png")  # installed as 512x512
+    shutil.copy2(ROOT / "packaging" / "linux" / "install.sh", app)
+    (app / "install.sh").chmod(0o755)  # in case the checkout lost the executable bit
+    print("Built", shutil.make_archive(str(DIST / "LeanCut-Linux-x64"), "gztar", DIST, "LeanCut"), "version", VERSION)
 elif os.name == "nt" and not os.environ.get("LEANCUT_SKIP_ZIP"):  # CI signs the exe first, then zips
     print("Built", shutil.make_archive(str(DIST / "LeanCut-Windows"), "zip", DIST, "LeanCut"), "version", VERSION)

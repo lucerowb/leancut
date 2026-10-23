@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>LeanCut</title>
 <meta name="claude:viewport-fit-sides" content="cover">
-<meta name="description" content="LeanCut turns hours of moto-vlog and daily-vlog footage into a tight YouTube cut with local AI. Nothing leaves your machine.">
+<meta name="description" content="LeanCut turns hours of moto-vlog and daily-vlog footage into a tight YouTube cut with local AI, then lets you finish it by telling an assistant what to change. Nothing leaves your machine.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,62..125,400..900;1,62..125,400..900&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
@@ -127,12 +127,13 @@ td .mono { white-space: nowrap; }
 <main id="main">
 <div class="wrap hero">
   <div>
-    <div class="eyebrow">Local AI video editor · macOS &amp; Windows</div>
+    <div class="eyebrow">Local AI video editor · macOS, Windows &amp; Linux</div>
     <h1 class="lean">Ride all day.<br><span>Cut it before dinner.</span></h1>
-    <p class="lede">LeanCut listens to hours of helmet-cam and vlog footage, transcribes it, lets an AI model on your own computer pick the moments worth keeping, and renders the cut. Your footage never leaves the machine.</p>
+    <p class="lede">LeanCut listens to hours of helmet-cam and vlog footage, transcribes it, lets an AI model on your own computer pick the moments worth keeping, and renders the cut. Want it shorter, warmer or with a title? Tell the assistant and watch the change straight away. Your footage never leaves the machine.</p>
     <div class="ctas">
       <a class="btn primary" href="https://github.com/lucerowb/leancut/releases/latest">Install for macOS</a>
       <a class="btn" href="https://github.com/lucerowb/leancut/releases/latest">Install for Windows</a>
+      <a class="btn" href="https://github.com/lucerowb/leancut/releases/latest">Install for Linux</a>
       <a class="btn" href="guide.html#install">Read the guide</a>
     </div>
   </div>
@@ -166,12 +167,12 @@ td .mono { white-space: nowrap; }
   <div class="wrap">
     <div class="eyebrow">How it works</div>
     <h2 class="lean">Four passes, all on your machine</h2>
-    <p class="intro">Each clip goes through the same pipeline. You review the result on a timeline before anything is rendered.</p>
+    <p class="intro">Each clip goes through the same pipeline. Then you review and polish the result in the editor, by hand or by asking the assistant, before the final render.</p>
     <ol class="steps">
       <li><h3>Listen</h3><p>Pulls the audio out of every clip and drops silence, wind roar and engine drone with voice-activity detection.</p><span class="tool">FFmpeg + Silero VAD</span></li>
       <li><h3>Transcribe</h3><p>Turns the talking into timecoded sentences. Works in 99 languages and can translate to English as it goes.</p><span class="tool">faster-whisper</span></li>
-      <li><h3>Judge</h3><p>A local language model scores every line from 1 to 5. Retakes, loud reactions and your spoken “clip that” markers count too. LeanCut keeps the best until your target length is reached.</p><span class="tool">Ollama · LM Studio</span></li>
-      <li><h3>Cut</h3><p>Stitches the kept lines and the best silent scenery into one loudness-matched video, plus files to finish in your usual editor.</p><span class="tool">MP4 · SRT · EDL · FCPXML · OTIO</span></li>
+      <li><h3>Judge</h3><p>A local language model scores every line from 1 to 5, with a confidence. Retakes, loud reactions, GoPro telemetry and your spoken “clip that” markers count too. LeanCut keeps the best until your target length is reached.</p><span class="tool">Ollama · LM Studio</span></li>
+      <li><h3>Cut</h3><p>Stitches the kept lines and the best silent scenery into one loudness-matched video with your looks, titles and transitions, plus files to finish in your usual editor.</p><span class="tool">MP4 · SRT · EDL · FCPXML · OTIO</span></li>
     </ol>
   </div>
 </section>
@@ -182,21 +183,21 @@ td .mono { white-space: nowrap; }
     <h2 class="lean">Everything a long ride needs</h2>
     <p class="intro">Talking-head editors throw away everything without words. LeanCut knows a ride is more than talk.</p>
     <ul class="features">
-      <li><span class="tag">Rides</span><b>Scenic B-roll keeper</b><span>Silent stretches are scored for movement, colour and exposure; the best views stay in, at a share you choose.</span></li>
-      <li><span class="tag">Rides</span><b>Say “clip that”</b><span>Shout a marker phrase mid-ride and the 30 seconds before it are kept. The command itself is cut.</span></li>
-      <li><span class="tag">Rides</span><b>Loud-moment boost</b><span>Shouts, laughs and revs that jump above the road noise lift the score of what was said there.</span></li>
-      <li><span class="tag">Rides</span><b>Ride-through fast-forward</b><span>Long dropped stretches can become a few seconds of time-lapse instead of a jump cut.</span></li>
-      <li><span class="tag">Edit</span><b>Retakes handled</b><span>When you say a line twice, the earlier take goes. Whisper's repeat loops are cleaned up too.</span></li>
-      <li><span class="tag">Edit</span><b>Drag to trim</b><span>Every kept block has handles on the timeline. Tick, untick and preview any line.</span></li>
-      <li><span class="tag">Publish</span><b>Chapters, title &amp; tags</b><span>A YouTube-ready description with valid chapters, written from what actually happens.</span></li>
-      <li><span class="tag">Publish</span><b>Subtitles &amp; Shorts</b><span>An .srt timed to the cut, and vertical 9:16 Shorts from the best continuous moments.</span></li>
-      <li><span class="tag">Publish</span><b>Thumbnail picks</b><span>The sharpest, best-exposed frames from the top-scored moments, saved as JPEGs.</span></li>
-      <li><span class="tag">Sound</span><b>YouTube loudness</b><span>Two-pass normalisation to −14 LUFS, optional wind and road-noise reduction, and click-free cuts.</span></li>
-      <li><span class="tag">Sound</span><b>Music that ducks</b><span>Pick a track and it loops under the video, dipping whenever someone speaks.</span></li>
-      <li><span class="tag">Speed</span><b>Hardware encoding, resumable</b><span>VideoToolbox or NVENC with GPU decoding. Cancel any time; a re-export reuses finished parts (28 s instead of 9 min in our 4K test).</span></li>
-      <li><span class="tag">Workflow</span><b>Projects &amp; overnight batch</b><span>Keep every trip as its own project and process a whole week of rides while you sleep.</span></li>
-      <li><span class="tag">Workflow</span><b>Second-camera sync</b><span>Line up a chest cam or phone with your helmet cam by their audio; the angle rides along into your editor.</span></li>
-      <li><span class="tag">Workflow</span><b>Updates without tracking</b><span>One anonymous check against GitHub tells you when a new version is out. You can turn it off.</span></li>
+      <li><span class="tag">Edit</span><b>AI assistant</b><span>Type “make it about 8 minutes” or “give it a warm cinematic look”. Your local model turns it into checked edit actions, and one undo takes them all back.</span></li>
+      <li><span class="tag">Edit</span><b>Suggestions for every part</b><span>Unsure lines, a missing intro title, J-cuts, a punch-in on long talking, slow motion on the big reaction. Apply or dismiss each one.</span></li>
+      <li><span class="tag">Edit</span><b>Timeline &amp; instant preview</b><span>Picture, Titles and Voice tracks, an inspector, keyboard shortcuts and undo. Plays at once from your files; <b>Render preview</b> makes an exact 540p version.</span></li>
+      <li><span class="tag">Look</span><b>Effects, transitions &amp; colour</b><span>Punch-ins, slow motion, 15 transitions, auto colour, presets, sliders and LUTs, titles, intro and outro cards, burned-in captions.</span></li>
+      <li><span class="tag">Voice</span><b>Voice-overs in your voice</b><span>Type a line and hear it in your own cloned voice, mixed in with the ride ducked underneath. Runs locally, and only with your consent.</span></li>
+      <li><span class="tag">AI</span><b>Decision engine</b><span>Scores come from the model's token probabilities, with a confidence for every line. Unsure lines become your call, and it learns from your overrides.</span></li>
+      <li><span class="tag">Rides</span><b>Scenic B-roll, judged</b><span>Silent stretches are scored for movement, colour and exposure; an optional local vision model looks at the best ones.</span></li>
+      <li><span class="tag">Rides</span><b>GoPro telemetry</b><span>The GPS track finds hard braking, twisties, top speed and summits, and keeps motorways and stops out of the B-roll.</span></li>
+      <li><span class="tag">Rides</span><b>Say “clip that”</b><span>Shout a marker phrase mid-ride and the 30 seconds before it stay in. Shouts, laughs and revs lift what was said there.</span></li>
+      <li><span class="tag">Privacy</span><b>Face &amp; plate blur</b><span>Two small on-device detectors blur faces and licence plates in the video before you publish it.</span></li>
+      <li><span class="tag">Sound</span><b>Clean voice, YouTube loudness</b><span>Neural enhancement lifts your voice out of engine rumble. −14 LUFS, music that ducks under speech, and an optional profanity bleep.</span></li>
+      <li><span class="tag">Find</span><b>Search by what's on screen</b><span>Find “lake” or “hairpin” across all your footage with an on-device image model, and drop a hit into the cut.</span></li>
+      <li><span class="tag">Workflow</span><b>Chapters &amp; stabilisation</b><span>Split camera files join into one clip automatically. Shaky shots get vid.stab, or swap in your Gyroflow export.</span></li>
+      <li><span class="tag">Publish</span><b>Ready to upload</b><span>The MP4, subtitles, a YouTube title, description and chapters, thumbnail picks, and vertical Shorts that follow the subject.</span></li>
+      <li><span class="tag">Workflow</span><b>Projects, batch &amp; updates</b><span>Every trip its own project, an overnight batch, second-camera sync, hardware encoding, and updates you install from inside the app.</span></li>
     </ul>
   </div>
 </section>
@@ -206,8 +207,8 @@ td .mono { white-space: nowrap; }
     <div class="eyebrow">See it</div>
     <h2 class="lean">One window, from raw ride to upload</h2>
     <div class="shots">
-      <figure><img src="assets/screens/editor.png" width="1440" height="1180" loading="lazy" alt="LeanCut editor: clip list, preview, model settings, processing log and a timeline with kept lines in green and scenic B-roll in amber"><figcaption>The editor: AI decisions on the timeline, every line scored with a reason.</figcaption></figure>
-      <figure><img src="assets/screens/settings.png" width="1440" height="1140" loading="lazy" alt="LeanCut settings: updates, export destination and formats, video encoder, audio, rider AI and models"><figcaption>Settings: export destination and formats, audio, encoder, rider AI and updates.</figcaption></figure>
+      <figure><img src="assets/screens/editor.png" width="1440" height="1180" loading="lazy" alt="LeanCut editor: media list, program monitor, AI assistant, a timeline with Picture, Titles and Voice tracks, and the inspector"><figcaption>The editor: monitor, assistant, timeline and inspector.</figcaption></figure>
+      <figure><img src="assets/screens/settings.png" width="1440" height="1140" loading="lazy" alt="LeanCut settings: updates, AI models, export destination and formats, video encoder, audio, voice and rider AI"><figcaption>Settings: AI models, export, audio, your voice, rider AI and updates.</figcaption></figure>
       <figure><img src="assets/screens/projects.png" width="1440" height="1180" loading="lazy" alt="LeanCut projects list with an overnight batch panel"><figcaption>Projects and the overnight batch queue.</figcaption></figure>
     </div>
   </div>
@@ -221,8 +222,8 @@ td .mono { white-space: nowrap; }
       <ul class="points">
         <li><b>No uploads</b><span>A 4K ride is tens of gigabytes. LeanCut reads it where it sits on your drive.</span></li>
         <li><b>No subscription</b><span>Whisper and the language model are free, open models running on your own CPU or GPU.</span></li>
-        <li><b>Works offline</b><span>After the one-time model download you can edit on a laptop at a campsite.</span></li>
-        <li><b>You have the final say</b><span>Every line shows its score and reason. Tick or untick anything before you export.</span></li>
+        <li><b>Works offline</b><span>After the one-time model downloads you can edit on a laptop at a campsite.</span></li>
+        <li><b>You have the final say</b><span>Every line shows its score and reason, and every edit can be undone. Nothing is rendered until you export.</span></li>
       </ul>
     </div>
     <div>
@@ -237,7 +238,7 @@ FCM: DROP FRAME
 
 <b>002</b>  AX  AA/V  C  21:01:33;26 21:01:46;12 <em>01:00:05;15 01:00:18;01</em>
 * FROM CLIP NAME: ride_01.MP4</pre>
-      <p class="muted">Source times follow each camera's own timecode (DJI and GoPro write time of day), so clips land on the right frames. FCPXML adds chapter markers and a synced second angle.</p>
+      <p class="muted">Source times follow each camera's own timecode (DJI and GoPro write time of day), so clips land on the right frames. FCPXML adds chapter markers and a synced second angle. Looks, titles and transitions are baked into the MP4 only.</p>
     </div>
   </div>
 </section>
@@ -258,20 +259,21 @@ FCM: DROP FRAME
         </tbody>
       </table>
     </div>
-    <p class="muted" style="margin-top:18px">Runs on Apple Silicon Macs and 64-bit Windows 10/11. On Windows, transcription uses an NVIDIA GPU when CUDA 12 and cuDNN 9 are installed, and the CPU otherwise.</p>
+    <p class="muted" style="margin-top:18px">Runs on Apple Silicon Macs, 64-bit Windows 10/11 and 64-bit Linux (Ubuntu 22.04, Debian 12 or newer). On Windows, transcription uses an NVIDIA GPU when CUDA 12 and cuDNN 9 are installed, and the CPU otherwise.</p>
   </div>
 </section>
 
 <section id="next">
   <div class="wrap">
-    <div class="eyebrow">Roadmap</div>
+    <div class="eyebrow">What's next</div>
     <h2 class="lean">Where LeanCut is heading</h2>
+    <p class="intro">Version 0.3 shipped the whole previous roadmap. These are the honest gaps we want to close next.</p>
     <div class="roadmap">
-      <div><h3>Next up</h3><ul><li>Auto-join camera chapter files (GoPro, DJI)</li><li>J-cuts and crossfades at every cut</li><li>Learns your taste from the lines you re-tick</li><li>Profanity bleep</li></ul></div>
-      <div><h3>For riders</h3><ul><li>GPS speed and g-force highlights from GoPro telemetry</li><li>Neural speech enhancement for engine rumble</li><li>Face and licence-plate blur</li><li>Gyro stabilisation via Gyroflow</li></ul></div>
-      <div><h3>For editors</h3><ul><li>Search your footage by what's in it (“lake”, “hairpin”)</li><li>Signed, notarized builds with in-app updates</li><li>Whisper models tuned for Nepali, Hindi and more</li><li>Linux build</li></ul></div>
+      <div><h3>Editing</h3><ul><li>Effects, transitions and titles in the EDL and FCPXML, not only in the MP4</li><li>Select several parts on the timeline and edit them at once</li><li>Cut by editing words in the transcript</li></ul></div>
+      <div><h3>For riders</h3><ul><li>A licence-plate model that works on more countries' plates</li><li>Telemetry checked against real GoPro rides</li><li>Whisper models tuned for Nepali, Hindi and more</li></ul></div>
+      <div><h3>Platform</h3><ul><li>Signed, notarized builds once we have certificates</li><li>GPU acceleration for the vision models on Windows and Linux</li><li>In-app updates tested on Windows and Linux</li></ul></div>
     </div>
-    <p style="margin-top:28px"><a href="guide.html#roadmap">See the full roadmap in the guide →</a></p>
+    <p style="margin-top:28px"><a href="guide.html#roadmap">More detail in the guide →</a></p>
   </div>
 </section>
 </main>

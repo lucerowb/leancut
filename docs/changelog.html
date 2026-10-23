@@ -39,6 +39,7 @@
   <aside class="toc" aria-label="Releases">
     <p>Releases</p>
     <ol>
+      <li><a href="#v0.3.0">v0.3.0</a></li>
       <li><a href="#v0.2.0">v0.2.0</a></li>
       <li><a href="#v0.1.0">v0.1.0</a></li>
     </ol>
@@ -48,6 +49,54 @@
     <h1>Changelog</h1>
     <p class="lede">What changed in each release. Downloads for every version are on the <a href="https://github.com/lucerowb/leancut/releases">GitHub releases page</a>.</p>
     <p><a class="btn primary" href="https://github.com/lucerowb/leancut/releases/latest">Download the latest release</a></p>
+
+    <section class="release" id="v0.3.0">
+      <h2>v0.3.0 <time datetime="2026-10-23">23 October 2026</time></h2>
+      <p>From an auto-cut to an editor. Tell LeanCut what to change in plain words, watch it straight away, and finish the look, titles and voice-over without leaving the app.</p>
+      <h3>Highlights</h3>
+      <ul>
+        <li><b>A real editor.</b> A program monitor, a timeline of the finished video with Picture, Titles and Voice tracks, and an Inspector for the part you select: trim, effect, the transition into it, its own colour, titles, voice-over and suggestions. Every edit can be undone (⌘Z) and redone (⇧⌘Z).</li>
+        <li><b>Instant and rendered preview.</b> The monitor plays the edit straight from your source files, with colour, effects, titles, captions, intro cards and transitions approximated in the window. <b>Render preview</b> makes an exact 540p render with everything baked in; switch the monitor to <b>Rendered</b> to watch it.</li>
+        <li><b>AI assistant.</b> Type “make it about 8 minutes” or “slow down the biggest reaction” and your local model turns it into edit actions. LeanCut checks every action before applying it, and one request is one undo step.</li>
+        <li><b>Suggestions for every part.</b> Rules flag lines the AI is unsure about, a missing intro title, dark clips, hard cuts, long talking stretches, loud reactions and shaky shots; the language model adds its own ideas. Apply, dismiss, apply all, or ask again.</li>
+        <li><b>Decision engine.</b> Instead of asking the model to write JSON, LeanCut reads its token probabilities for ★1–★5 and for a fixed list of reasons (Ollama's logprobs). Each line gets a probability-weighted score and a confidence, and lines under 55% confidence become “your call” suggestions. The transcript is read once per chunk, so each further question costs about 0.2 s. Servers without logprobs, such as LM Studio, fall back to batch scoring.</li>
+        <li><b>Looks.</b> 8 effects, 15 transitions, 9 colour presets, auto colour per clip, exposure, contrast, saturation, temperature and vignette sliders, <code>.cube</code> and <code>.3dl</code> LUTs, four title styles, intro and outro cards, and burned-in captions.</li>
+        <li><b>Voice-overs in your own voice.</b> Type a line and it's spoken in your cloned voice and mixed in, with the video's sound ducked under it. <b>Use my voice from this project</b> picks the cleanest stretch of your own speech. Cloning needs your consent and an optional install (see the upgrade notes).</li>
+        <li><b>Linux.</b> A <code>.tar.gz</code> with an installer, for Ubuntu 22.04, Debian 12 and newer.</li>
+      </ul>
+      <h3>Also new</h3>
+      <ul>
+        <li><b>Camera chapters join automatically.</b> GoPro files named <code>GH01xxxx</code>, <code>GH02xxxx</code>… and files whose timecode continues where the previous one ended are read as one clip. Edit lists still point at the real files.</li>
+        <li><b>J-cuts and crossfades.</b> Pick a cut style for the whole video, or a transition into one part.</li>
+        <li><b>Learns your taste.</b> Lines you keep or cut yourself are saved in <code>taste.json</code> in the data folder and shown to the decision engine as examples of what you like.</li>
+        <li><b>Profanity bleep.</b> Swear words are muted under a 1 kHz tone, timed by Whisper's word timings, and masked in burned-in captions and the exported <code>.srt</code>. Add your own words in Settings › Audio.</li>
+        <li><b>GoPro telemetry highlights.</b> The GPS track marks hard braking, twisties, top speed and summits, which lift nearby lines and B-roll. Stopped and motorway stretches are left out of the B-roll. It hasn't been tested on a real GoPro file yet.</li>
+        <li><b>Neural voice enhancement.</b> DeepFilterNet3 lifts your voice out of engine and wind noise on the CPU: +10.7 dB SNR on a synthetic 0 dB engine-noise test, and 30 minutes of stereo audio in 37 seconds.</li>
+        <li><b>Face and licence-plate blur</b> with two small on-device detectors.</li>
+        <li><b>Stabilisation.</b> A built-in two-pass vid.stab per part, or stabilise in Gyroflow and click <b>Use Gyroflow export</b>.</li>
+        <li><b>Search your footage by what's on screen</b> (“lake”, “hairpin”) with an on-device CLIP model, and add a hit to the cut as B-roll.</li>
+        <li><b>Visual judge.</b> An optional local vision model in Ollama (for example <code>gemma3:4b</code>) describes and rates the top B-roll candidates; its rating is blended with the motion and colour score.</li>
+        <li><b>Shorts follow the subject</b>: the 9:16 crop tracks the largest face, or the most eye-catching part of the frame.</li>
+        <li><b>In-app updates.</b> Download, install and restart from the update banner. Tested on macOS; the Windows and Linux installers haven't been tested on a real update yet.</li>
+        <li><b>Signing-ready releases.</b> The release workflow signs and notarizes builds when signing certificates are configured. None are yet, so this release is still unsigned.</li>
+        <li><b>Constrained output.</b> The assistant's and suggestions' answers are constrained to a JSON schema (Ollama <code>format</code>, LM Studio <code>json_schema</code>), so the model can't return something LeanCut can't use.</li>
+      </ul>
+      <h3>Fixed</h3>
+      <ul>
+        <li>Lower-third titles sat on top of burned-in captions; they now sit above them.</li>
+        <li>When FFmpeg failed, the error showed only the end of its log. It now shows the first error lines.</li>
+        <li>Subtitles and chapters skipped parts that play slower or faster; they're now timed to them.</li>
+      </ul>
+      <h3>Upgrade notes</h3>
+      <ul>
+        <li>Lines are re-scored once, because scoring changed.</li>
+        <li>Clips are measured once more, because auto colour needs two more values from each keyframe.</li>
+        <li>The language model, Whisper model and server settings moved from the editor to <b>Settings › AI models</b>.</li>
+        <li>Optional models download the first time you use the feature, into <code>models/</code> in the data folder: face detector (0.2 MB) and plate detector (4 MB) for blur and Shorts tracking, CLIP (about 150 MB) for footage search, DeepFilterNet3 (8 MB) for voice enhancement. The visual judge uses a vision model you pull into Ollama yourself.</li>
+        <li>Voice cloning isn't in the packaged apps, because it needs PyTorch. From a source checkout run <code>pip install -r requirements-voice.txt</code> (about 1 GB, plus a 3.8 GB model on first use), or run <code>voice_server.py</code> and point <b>Settings › Voice</b> at it. Without either, voice-overs use your system's voice.</li>
+        <li>Linux is new: extract <code>LeanCut-Linux-x64.tar.gz</code> and run <code>./LeanCut/install.sh</code>.</li>
+      </ul>
+    </section>
 
     <section class="release" id="v0.2.0">
       <h2>v0.2.0 <time datetime="2026-10-23">23 October 2026</time></h2>

@@ -95,3 +95,34 @@ jobs:
         with:
           files: dist/LeanCut-Windows.zip
           body_path: .github/release-notes.md
+
+  linux:
+    runs-on: ubuntu-22.04  # oldest runner: the build needs glibc 2.35+, so it runs on Ubuntu 22.04 / Debian 12 and newer
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # Qt WebEngine's system libraries (PyInstaller bundles what it finds) + Xvfb for the smoke test
+      - run: >
+          sudo apt-get update && sudo apt-get install -y libegl1 libgl1 libxkbcommon-x11-0 libxcb-cursor0
+          libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-shape0
+          libxcb-xinerama0 libxcb-xkb1 libnss3 libxcomposite1 libxdamage1 libxrandr2 libxtst6 libasound2
+          libdbus-1-3 libfontconfig1 xvfb
+      # pywebview's Qt backend (PyQt6 + WebEngine): Linux only, the other builds use the system web view
+      - run: pip install -r requirements.txt -r requirements-build.txt -r requirements-dev.txt "pywebview[qt]"
+      - run: python -m pytest -q tests
+      - run: python build.py
+      - name: Smoke test (the window must stay up for 20 s)
+        run: |
+          xvfb-run -a timeout 20 dist/LeanCut/LeanCut && exit 1 || code=$?
+          [ "$code" = 124 ] || { cat ~/.local/share/LeanCut/leancut.log; exit 1; }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LeanCut-Linux
+          path: dist/LeanCut-Linux-x64.tar.gz
+      - if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/LeanCut-Linux-x64.tar.gz
+          body_path: .github/release-notes.md

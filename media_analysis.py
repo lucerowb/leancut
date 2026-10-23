@@ -23,7 +23,7 @@ def keyframe_stats(src, cache_file=None):
     if cache_file and Path(cache_file).exists():
         return json.loads(Path(cache_file).read_text(encoding="utf-8"))
     # format=yuv420p: 10-bit footage (DJI, GoPro HEVC) would otherwise report brightness on a 0-1023 scale
-    out = ve._ffmpeg(["-skip_frame", "nokey", "-i", str(src), "-an", "-vf",
+    out = ve._ffmpeg(["-skip_frame", "nokey", *ve.inp(src), "-an", "-vf",
                       "scale=160:-2,format=yuv420p,select='gte(scene,0)',signalstats,metadata=print:file=-",
                       "-f", "null", "-"]).stdout
     rows, cur = [], None
@@ -35,8 +35,8 @@ def keyframe_stats(src, cache_file=None):
                 rows.append(cur)
         elif cur is not None and "=" in line:
             key, val = line.split("=", 1)
-            name = {"lavfi.scene_score": "motion", "lavfi.signalstats.YAVG": "y",
-                    "lavfi.signalstats.SATAVG": "sat"}.get(key.strip())
+            name = {"lavfi.scene_score": "motion", "lavfi.signalstats.YAVG": "y", "lavfi.signalstats.YLOW": "ylow",
+                    "lavfi.signalstats.YHIGH": "yhigh", "lavfi.signalstats.SATAVG": "sat"}.get(key.strip())
             if name:
                 cur[name] = float(val)
     if cache_file:

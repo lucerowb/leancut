@@ -4,7 +4,7 @@ Thanks for helping out. This guide covers how to set up the project, what's expe
 
 ## Ground rules
 
-- **Local is the product.** Footage, audio and transcripts never leave the user's computer. Pull requests that add analytics, telemetry, ads, accounts, or network traffic beyond the Whisper model download, the user's own LLM server and the optional update check won't be merged.
+- **Local is the product.** Footage, audio and transcripts never leave the user's computer. Pull requests that add analytics, telemetry, ads, accounts, or network traffic beyond pinned model downloads, the user's own LLM and voice servers, and the optional update check and download won't be merged. New models are downloaded on first use, pinned to a commit, never bundled, and listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 - **Never touch the user's originals.** LeanCut reads source clips where they are and only ever deletes copies it made itself. Changes to file handling need a test or a clear explanation of how you verified it.
 - Keep changes focused: one fix or feature per pull request.
 
@@ -17,7 +17,9 @@ Thanks for helping out. This guide covers how to set up the project, what's expe
    source .venv/bin/activate        # Windows: .venv\Scripts\activate
    pip install -r requirements.txt -r requirements-build.txt
    pip install -r requirements-dev.txt   # pytest, httpx, opentimelineio
+   pip install -r requirements-voice.txt # optional: local voice cloning (PyTorch, ~1 GB)
    ```
+   On Linux, the native window also needs `pip install "pywebview[qt]"`.
 3. Install a local language-model server and pull a model that fits your memory:
    - [Ollama](https://ollama.com): `ollama pull qwen2.5:7b` (listens on `http://localhost:11434`)
    - LM Studio: load a model, open the **Developer** tab and click **Start Server** (listens on `http://localhost:1234/v1`)
@@ -31,7 +33,9 @@ When run from source, LeanCut keeps its project, cache and exports in `workspace
 
 ## Code style
 
-- Small modules with one job each: `app.py` (server and pipeline), `transcriber.py`, `llm_agent.py`, `video_engine.py`, `desktop.py`. See the project layout in [README.md](README.md#project-layout).
+- Small modules with one job each: `app.py` (server and pipeline), `editing.py` (the edit model and actions), `production.py`, `video_engine.py`, `llm_agent.py`, `transcriber.py`, and the optional `vision.py`, `enhance.py`, `voice.py`, `telemetry.py`. See the project layout in [README.md](README.md#project-layout).
+- Every change to an edit is an action in `editing.ACTION_TYPES`, so the UI, suggestions and the assistant behave the same and can be undone. Add new edit features there, not as a separate endpoint.
+- Optional features are imported with `app._optional` and must fail with a clear message when their module or model is missing.
 - Match the surrounding code: its naming, formatting and comment style. Comment why, not what.
 - The UI in `static/` is plain HTML, CSS and JavaScript with no build step. Keep it that way.
 - Don't add a dependency for something a few lines of code can do.
@@ -48,7 +52,7 @@ Tests must pass. If you changed the pipeline, also run one real edit end to end 
 To check the packaged app:
 
 ```bash
-python build.py        # macOS: dist/LeanCut.app + dist/LeanCut-macOS.dmg · Windows: dist/LeanCut/ + dist/LeanCut-Windows.zip
+python build.py        # macOS: dist/LeanCut.app + dist/LeanCut-macOS.dmg · Windows: dist/LeanCut/ + dist/LeanCut-Windows.zip · Linux: dist/LeanCut/ + dist/LeanCut-Linux-x64.tar.gz
 ```
 
 PyInstaller can't cross-compile, so each OS builds its own app.
@@ -62,12 +66,12 @@ PyInstaller can't cross-compile, so each OS builds its own app.
 
 ## Releasing
 
-1. Add a section for the new version to `docs/changelog.html`.
+1. Bump `VERSION` in `app.py`, add the new version to `CHANGELOG.md` and `docs/changelog.html`, and put its notes in `.github/release-notes.md`.
 2. Tag and push:
    ```bash
-   git tag v0.2.0 && git push origin v0.2.0
+   git tag v0.3.0 && git push origin v0.3.0
    ```
-3. The **build** workflow (`.github/workflows/build.yml`) runs the tests, builds the macOS `.dmg` and the Windows `.zip`, and attaches both to the GitHub release.
+3. The **Release** workflow (`.github/workflows/release.yml`) runs the tests on each OS, builds the macOS `.dmg`, the Windows `.zip` and the Linux `.tar.gz` (with a 20-second smoke test), and attaches them to the GitHub release with the notes. When the signing secrets listed at the top of the workflow are set, the macOS app is signed and notarized and the Windows exe is signed. In-app updates find the new assets by these file names, so don't rename them.
 
 ## Reporting bugs and security issues
 

@@ -1,0 +1,7 @@
+# Optional: voice-overs in your own cloned voice (voice.py "chatterbox" engine, voice_server.py).
+# Large: PyTorch (~1 GB installed) plus a ~3.8 GB model (Chatterbox-Turbo) downloaded from Hugging Face on first use.
+#   pip install -r requirements.txt -r requirements-voice.txt
+# Chatterbox pins numpy<2, torch 2.6 and transformers on Python 3.12; if that clashes with your LeanCut venv,
+# install it in a separate venv and run voice_server.py from there instead (the "server" engine).
+chatterbox-tts>=0.1.7,<0.2  # MIT, Resemble AI
+setuptools<81  # its watermarker (resemble-perth) imports pkg_resources, which setuptools 81 removed

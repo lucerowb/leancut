@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=LeanCut
+Comment=Local AI video editor: turn hours of vlog footage into a tight cut
+Exec=LeanCut
+Icon=leancut
+Terminal=false
+Categories=AudioVideo;Video;AudioVideoEditing;
+Keywords=video;editor;vlog;transcribe;youtube;
+StartupWMClass=LeanCut

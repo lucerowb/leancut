@@ -90,6 +90,8 @@ def merge_fragments(segments, min_dur=4.0, max_gap=1.5, max_dur=20.0):
         if (cur and s["start"] - cur["end"] <= max_gap and s["end"] - cur["start"] <= max_dur
                 and (cur["end"] - cur["start"] < min_dur or not cur["text"].endswith((".", "!", "?")))):
             cur["end"], cur["text"] = s["end"], f"{cur['text']} {s['text']}"
+            if "words" in cur or "words" in s:
+                cur["words"] = (cur.get("words") or []) + (s.get("words") or [])
             for k in SCORE_FIELDS:
                 cur.pop(k, None)
         else:
@@ -148,8 +150,9 @@ def split_sentences(words, max_pause=1.0):
         nxt = words[i + 1] if i + 1 < len(words) else None
         if nxt is None or w.word.strip().endswith((".", "!", "?")) or nxt.start - w.end > max_pause:
             text = "".join(x.word for x in cur).strip()
-            if text:
-                out.append({"start": round(cur[0].start, 2), "end": round(cur[-1].end, 2), "text": text})
+            if text:  # word times are kept for exact profanity bleeps
+                out.append({"start": round(cur[0].start, 2), "end": round(cur[-1].end, 2), "text": text,
+                            "words": [[x.word.strip(), round(x.start, 2), round(x.end, 2)] for x in cur]})
             cur = []
     return out
 

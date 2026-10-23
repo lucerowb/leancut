@@ -82,9 +82,11 @@ def test_split_sentences_on_punctuation_and_pauses():
     from transcriber import split_sentences
     words = [W(word=" Hi", start=0.0, end=0.4), W(word=" there.", start=0.5, end=0.9),
              W(word=" Um", start=1.0, end=1.2), W(word=" look", start=3.0, end=3.3), W(word=" wow", start=3.4, end=3.8)]
-    assert split_sentences(words) == [{"start": 0.0, "end": 0.9, "text": "Hi there."},
-                                      {"start": 1.0, "end": 1.2, "text": "Um"},
-                                      {"start": 3.0, "end": 3.8, "text": "look wow"}]
+    out = split_sentences(words)
+    assert [{k: v for k, v in s.items() if k != "words"} for s in out] == [
+        {"start": 0.0, "end": 0.9, "text": "Hi there."}, {"start": 1.0, "end": 1.2, "text": "Um"},
+        {"start": 3.0, "end": 3.8, "text": "look wow"}]
+    assert out[2]["words"] == [["look", 3.0, 3.3], ["wow", 3.4, 3.8]]  # kept for exact bleeps
 
 
 def test_merge_fragments_joins_short_pieces_but_not_long_pauses():
@@ -143,7 +145,7 @@ def test_chat_streams_and_detects_stalls():
 def test_decide_falls_back_to_keep_all_on_bad_replies():
     segs = [{"id": i, "clip": 1, "start": i, "end": i + 1, "text": "hi"} for i in range(3)]
     real = llm_agent.chat
-    quiet = {"log": lambda m: None}
+    quiet = {"log": lambda m: None, "engine": "batch"}
     llm_agent.chat = lambda *a: "not json"
     assert all(d["keep"] for d in llm_agent.decide(segs, "ollama", "", "m", **quiet).values())
     llm_agent.chat = lambda *a: '{"scores":[{"id":0,"s":2},{"id":1,"s":5,"r":"funny"},{"id":2,"s":1,"r":"repeat"}]}'
@@ -154,6 +156,28 @@ def test_decide_falls_back_to_keep_all_on_bad_replies():
     kept = {i for i, d in llm_agent.decide(segs, "ollama", "", "m", target_seconds=60, **quiet).items() if d["keep"]}
     assert kept == {0, 1, 2}
     llm_agent.chat = real
+
+
+def test_decision_engine_reads_option_probabilities():
+    segs = [{"id": i, "clip": 1, "start": i * 5, "end": i * 5 + 4, "text": t} for i, t in
+            enumerate(["Welcome back!", "Um, so, uh", "Look at that view"])]
+    table = {0: {"5": 0.7, "4": 0.3}, 1: {"1": 0.9, "2": 0.1}, 2: {"4": 0.5, "3": 0.5}}
+    labels = {0: {"A": 0.9}, 1: {"I": 0.8}, 2: {"D": 0.6}}
+    seen = []
+
+    def fake(provider, base, model, system, user, **kw):
+        seen.append(system)
+        i = int(user.split("[")[1].split("]")[0])
+        return table[i] if "digit" in user else labels[i]
+    real, llm_agent.option_probs = llm_agent.option_probs, fake
+    try:
+        out = llm_agent.decide_probs(segs, "ollama", "", "m", log=lambda m: None,
+                                     taste=[{"text": "I love this road", "kept": True}])
+    finally:
+        llm_agent.option_probs = real
+    assert out[0] == (4.7, "opening hook", 0.7) and out[1] == (1.1, "false start or repeat", 0.9)
+    assert out[2] == (3.5, "genuine reaction", 0.5)  # 50/50 -> low confidence, surfaced as "your call"
+    assert "I love this road" in seen[0] and "Welcome back!" in seen[0]
 
 
 def test_v01_project_is_migrated_without_loss():
