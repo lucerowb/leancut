@@ -22,7 +22,7 @@ import PyInstaller.__main__
 
 ROOT = Path(__file__).parent
 DIST = ROOT / "dist"
-VERSION = re.search(r'^VERSION = "([^"]+)"', (ROOT / "app.py").read_text(), re.M).group(1)
+VERSION = re.search(r'^VERSION = "([^"]+)"', (ROOT / "app.py").read_text(encoding="utf-8"), re.M).group(1)
 
 PyInstaller.__main__.run([
     str(ROOT / "desktop.py"),

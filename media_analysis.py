@@ -21,7 +21,7 @@ def _np():
 def keyframe_stats(src, cache_file=None):
     """[{t, motion, y, sat}] for every keyframe. Decoding keyframes only keeps a 4K hour to seconds or minutes."""
     if cache_file and Path(cache_file).exists():
-        return json.loads(Path(cache_file).read_text())
+        return json.loads(Path(cache_file).read_text(encoding="utf-8"))
     # format=yuv420p: 10-bit footage (DJI, GoPro HEVC) would otherwise report brightness on a 0-1023 scale
     out = ve._ffmpeg(["-skip_frame", "nokey", "-i", str(src), "-an", "-vf",
                       "scale=160:-2,format=yuv420p,select='gte(scene,0)',signalstats,metadata=print:file=-",
@@ -40,7 +40,7 @@ def keyframe_stats(src, cache_file=None):
             if name:
                 cur[name] = float(val)
     if cache_file:
-        Path(cache_file).write_text(json.dumps(rows))
+        Path(cache_file).write_text(json.dumps(rows), encoding="utf-8")
     return rows
 
 
