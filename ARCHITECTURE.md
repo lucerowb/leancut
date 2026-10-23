@@ -29,7 +29,7 @@ FFmpeg for media, faster-whisper for speech, onnxruntime for the small vision an
 |---|---|---|
 | Window | pywebview | Native window around the web UI; no Electron runtime to ship. Qt backend on Linux |
 | Server | FastAPI + uvicorn | Small, typed, runs in-process |
-| Media | FFmpeg via `imageio-ffmpeg` | One bundled GPL build per OS (x264, x265, freetype for titles, vid.stab); probing parses `ffmpeg -i`, so no ffprobe |
+| Media | FFmpeg via `imageio-ffmpeg` | One bundled GPL build per OS (x264, x265, freetype for titles, vid.stab), preferred over a system ffmpeg so features match everywhere (`LEANCUT_FFMPEG` overrides); probing parses `ffmpeg -i`, so no ffprobe |
 | Speech | faster-whisper (CTranslate2) + Silero VAD | Fast on CPU, GPU when available, VAD built in |
 | Judgement and editing | Any Ollama / OpenAI-compatible model | User's choice; nothing leaves the machine by default |
 | Vision, enhancement | ONNX models on onnxruntime (CPU) | Small downloads, no PyTorch in the packaged app |

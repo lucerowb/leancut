@@ -19,7 +19,8 @@ def prepare(workdir):
     workdir = Path(workdir)
     for d in ("texts", "fonts", "luts", "trf"):
         (workdir / d).mkdir(parents=True, exist_ok=True)
-    font = editing.find_font()
+    import video_engine
+    font = editing.find_font() if video_engine.has_filter("drawtext") else None  # titles need FFmpeg's drawtext
     target = workdir / "fonts" / ("title" + (Path(font).suffix if font else ".ttf"))
     if font and not target.exists():
         shutil.copy(font, target)

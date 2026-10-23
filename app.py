@@ -639,6 +639,8 @@ def render_program(out_path, fmt, preview=False):
     if not parts:
         raise RuntimeError("No segments are marked to keep. Run the auto-edit or tick some lines first.")
     wd, font = production.prepare(CACHE / "render")
+    if not font and (project.get("captions") or project.get("intro") or any(p["texts"] for p in parts)):
+        log("Titles and captions skipped: this FFmpeg has no drawtext filter or no font was found.")
     vision = _optional("vision") if project.get("privacy_blur") else None
     if project.get("privacy_blur") and not vision:
         log("Face & plate blur needs the vision module; skipped.")

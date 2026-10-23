@@ -40,18 +40,24 @@ def check_cancel():
         raise Cancelled("Cancelled.")
 
 
+@functools.cache
 def ffmpeg_exe() -> str:
-    exe = shutil.which("ffmpeg")
-    if exe:
-        return exe
+    """LEANCUT_FFMPEG if set, else the bundled imageio-ffmpeg build (a known feature set: drawtext, vid.stab, x264…),
+    else whatever ffmpeg is on PATH. System builds vary a lot; some lack the filters titles need."""
+    import os
+    if os.environ.get("LEANCUT_FFMPEG"):
+        return os.environ["LEANCUT_FFMPEG"]
     try:
         import imageio_ffmpeg
         return imageio_ffmpeg.get_ffmpeg_exe()
-    except Exception as e:
-        raise RuntimeError(
-            "FFmpeg not found. Run `pip install imageio-ffmpeg` (bundled binary) or install it system-wide "
-            "(macOS: brew install ffmpeg, Windows: winget install ffmpeg, Linux: apt install ffmpeg)."
-        ) from e
+    except Exception:
+        pass
+    exe = shutil.which("ffmpeg")
+    if exe:
+        return exe
+    raise RuntimeError(
+        "FFmpeg not found. Run `pip install imageio-ffmpeg` (bundled binary) or install it system-wide "
+        "(macOS: brew install ffmpeg, Windows: winget install ffmpeg, Linux: apt install ffmpeg).")
 
 
 def _ffmpeg(args, check=True, binary=False, cwd=None) -> subprocess.CompletedProcess:
@@ -70,6 +76,12 @@ def _ffmpeg(args, check=True, binary=False, cwd=None) -> subprocess.CompletedPro
         first = [l for l in err.splitlines() if re.search(r"error|invalid|failed|no such|not found|unable", l, re.I)][:4]
         raise RuntimeError("ffmpeg failed: " + " | ".join(first)[:600] + " … " + err.strip()[-300:])
     return proc
+
+
+@functools.cache
+def has_filter(name) -> bool:
+    out = _ffmpeg(["-filters"], check=False).stdout
+    return bool(re.search(rf"\s{re.escape(name)}\s", out))
 
 
 def inp(src):
