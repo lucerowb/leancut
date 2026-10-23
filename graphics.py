@@ -146,7 +146,7 @@ def ensure_browser(models_dir, log=print):
 class Browser:
     """One headless browser process, reused for many pages. Use as a context manager."""
 
-    def __init__(self, exe=None, timeout=30):
+    def __init__(self, exe=None, timeout=90):  # a first start on a fresh Windows machine can be slow
         from websockets.sync.client import connect
         exe = exe or find_browser()
         if not exe:

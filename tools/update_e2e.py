@@ -204,6 +204,9 @@ def main():
         check("failed install left the old copy in place", exe.read_bytes() == old_exe)
 
     say(f"install folder now holds: {sorted(p.name for p in bundle.parent.iterdir())}")
+    log = bundle.parent / ".leancut-update.log"
+    if log.exists():
+        say("updater log:\n" + log.read_text(encoding="utf-8", errors="replace"))
     say("\n==== update e2e summary ====")
     for name, ok in results:
         say(f"{'PASS' if ok else 'FAIL'}  {name}")

@@ -158,7 +158,8 @@ def restart() -> None:
         env["LD_LIBRARY_PATH"] = env.pop("LD_LIBRARY_PATH_ORIG")
     else:
         env.pop("LD_LIBRARY_PATH", None)
-    detach = ({"creationflags": subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP}
+    # CREATE_NO_WINDOW, not DETACHED_PROCESS: PowerShell started with no console at all can quit before running.
+    detach = ({"creationflags": subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP}
               if sys.platform == "win32" else {"start_new_session": True})
     subprocess.Popen(_helper, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                      stderr=subprocess.DEVNULL, close_fds=True, **detach)
@@ -202,14 +203,19 @@ def helper_script(platform: str, bundle: Path, new: Path, old: Path, pid: int, s
         return f"""# LeanCut updater (written by updates.py; deletes itself)
 $app = {q(bundle)}; $new = {q(new)}; $old = {q(old)}; $stage = {q(stage)}
 $exe = Join-Path $app 'LeanCut.exe'
+# a log beside the app folder, so a failed update can be diagnosed
+$log = Join-Path (Split-Path -LiteralPath $app -Parent) '.leancut-update.log'
+function Note($m) {{ Add-Content -LiteralPath $log -Value ((Get-Date -Format s) + ' ' + $m) -ErrorAction SilentlyContinue }}
+trap {{ Note ('error: ' + $_); continue }}
+Note 'updater started'
 Wait-Process -Id {int(pid)} -ErrorAction SilentlyContinue
 # -LiteralPath and Process.Start: -Path and Start-Process read [ ] in folder names as wildcards
 if (Test-Path -LiteralPath $old) {{ Remove-Item -LiteralPath $old -Recurse -Force }}
 # Windows (and antivirus) can hold files for a moment after the app exits: retry the rename.
 for ($i = 0; $i -lt 30 -and (Test-Path -LiteralPath $app); $i++) {{ try {{ Move-Item -LiteralPath $app $old -ErrorAction Stop }} catch {{ Start-Sleep 1 }} }}
-if (Test-Path -LiteralPath $app) {{ [void][Diagnostics.Process]::Start($exe); exit 1 }}
-try {{ Move-Item -LiteralPath $new $app -ErrorAction Stop; [void][Diagnostics.Process]::Start($exe) }}
-catch {{ if (Test-Path -LiteralPath $app) {{ Remove-Item -LiteralPath $app -Recurse -Force }}; Move-Item -LiteralPath $old $app; [void][Diagnostics.Process]::Start($exe); exit 1 }}
+if (Test-Path -LiteralPath $app) {{ Note 'the old version is still in use; starting it again'; [void][Diagnostics.Process]::Start($exe); exit 1 }}
+try {{ Move-Item -LiteralPath $new $app -ErrorAction Stop; [void][Diagnostics.Process]::Start($exe); Note 'updated and restarted' }}
+catch {{ Note ('swap failed: ' + $_); if (Test-Path -LiteralPath $app) {{ Remove-Item -LiteralPath $app -Recurse -Force }}; Move-Item -LiteralPath $old $app; [void][Diagnostics.Process]::Start($exe); exit 1 }}
 Remove-Item -LiteralPath $old -Recurse -Force -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue
 """
