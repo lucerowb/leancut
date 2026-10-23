@@ -1,0 +1,3 @@
+pywebview>=5.0
+pyinstaller>=6.0
+pillow>=10.0  # converts assets/icon.png to .icns/.ico at build time

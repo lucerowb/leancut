@@ -1,0 +1,8 @@
+workspace/
+.venv/
+__pycache__/
+build/
+dist/
+*.spec
+.DS_Store
+.pytest_cache/

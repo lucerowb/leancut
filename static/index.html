@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LeanCut</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>LeanCut <span>local AI video editor</span></h1>
+  <nav>
+    <button class="tab active" data-tab="editor">Editor</button>
+    <button class="tab" data-tab="setup">Setup</button>
+  </nav>
+</header>
+
+<main id="editor" class="page">
+  <section class="panel library">
+    <h2>Media library</h2>
+    <label id="drop" class="drop">
+      <input id="files" type="file" accept=".mp4,.mov,.mkv" multiple hidden>
+      Drop .mp4 / .mov / .mkv clips here or <u>browse</u>
+      <small>Uploads copy the file into the workspace</small>
+    </label>
+    <form id="pathForm" class="row">
+      <input id="pathInput" placeholder="…or paste a local file path (no copy)" aria-label="Local file path">
+      <button>Add</button>
+    </form>
+    <ul id="clips"></ul>
+  </section>
+
+  <section class="panel preview">
+    <video id="player" controls preload="metadata"></video>
+    <p id="nowPlaying" class="muted">Select a clip to preview</p>
+  </section>
+
+  <section class="panel config">
+    <h2>Models &amp; API</h2>
+    <label>Whisper model <select id="whisper_size"></select></label>
+    <label>Spoken language <select id="language"></select></label>
+    <label>LLM server
+      <select id="provider">
+        <option value="ollama">Ollama</option>
+        <option value="lmstudio">LM Studio / OpenAI-compatible</option>
+      </select>
+    </label>
+    <label>Base URL <input id="base_url"></label>
+    <label>LLM model
+      <span class="row"><select id="model"></select><button id="refreshModels" title="Refresh model list" aria-label="Refresh model list">↻</button></span>
+    </label>
+    <p id="llmStatus" class="muted small"></p>
+    <label>Target length <input id="target_length" placeholder="e.g. 10-15 minutes (optional)"></label>
+    <label>Render mode
+      <select id="render_mode">
+        <option value="accurate">Frame-accurate (re-encode H.264)</option>
+        <option value="fast">Fast (stream copy, keyframe cuts)</option>
+      </select>
+    </label>
+    <div class="actions">
+      <button id="runBtn" class="primary">① Auto-edit with AI</button>
+      <button id="exportBtn" class="primary alt">② Export video + EDL</button>
+    </div>
+  </section>
+
+  <section class="panel console">
+    <div class="row between"><h2>Processing</h2><span id="stepLabel" class="muted">Idle</span></div>
+    <div class="bar"><div id="bar"></div></div>
+    <pre id="log" aria-live="polite"></pre>
+    <div id="result"></div>
+  </section>
+
+  <section class="panel timeline">
+    <div class="row between">
+      <h2>Timeline &amp; transcript</h2>
+      <span id="summary" class="muted"></span>
+    </div>
+    <p class="muted small">Green = kept by the AI. Click text to preview, tick/untick to tweak the cut before exporting.</p>
+    <div id="tracks"></div>
+    <div id="transcript"></div>
+  </section>
+</main>
+
+<main id="setup" class="page hidden">
+  <section class="panel">
+    <h2>FFmpeg</h2>
+    <p id="ffmpegStatus"></p>
+  </section>
+  <section class="panel">
+    <h2>Whisper models <small class="muted">(downloaded once from Hugging Face, then fully offline)</small></h2>
+    <ul id="whisperList" class="plain"></ul>
+  </section>
+  <section class="panel">
+    <h2>Local LLM</h2>
+    <p class="muted">Start <b>Ollama</b> (<code>ollama serve</code>, then e.g. <code>ollama pull qwen2.5:7b</code>) or
+      <b>LM Studio</b> (Developer → Start Server, load a model such as Qwen 2.5 7B / Llama 3.1 8B).
+      Then pick the server and model on the Editor tab.</p>
+    <button id="testLlm">Test connection</button>
+    <p id="setupLlm"></p>
+  </section>
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>
