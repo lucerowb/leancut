@@ -143,6 +143,14 @@ def ensure_browser(models_dir, log=print):
 
 # ---------------------------------------------------------------- the browser and its pages (DevTools Protocol)
 
+def _read_port_file(path):
+    """The DevToolsActivePort lines, or [] while Chrome is still writing it (on Windows it's locked meanwhile)."""
+    try:
+        return path.read_text(encoding="utf-8").splitlines()
+    except OSError:  # not there yet, or PermissionError while Chrome holds it open
+        return []
+
+
 class Browser:
     """One headless browser process, reused for many pages. Use as a context manager."""
 
@@ -169,13 +177,13 @@ class Browser:
                                      creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         try:
             port_file, end = self.profile / "DevToolsActivePort", time.monotonic() + timeout
-            while not (port_file.exists() and len(port_file.read_text().splitlines()) >= 2):
+            while len(lines := _read_port_file(port_file)) < 2:
                 if self.proc.poll() is not None:
                     raise GraphicsError(f"The browser exited at start: {self._stderr()}")
                 if time.monotonic() > end:
                     raise GraphicsError("The browser did not start in time.")
                 time.sleep(0.02)
-            port, path = port_file.read_text().splitlines()[:2]
+            port, path = lines[:2]
             # entered by hand: kept open across calls; works with websockets 15–17+ without a legacy warning
             self.ws = connect(f"ws://127.0.0.1:{port}{path}", max_size=None, compression=None,
                               ping_interval=None, open_timeout=timeout).__enter__()

@@ -232,3 +232,17 @@ def _drive_monitor(browser, url):
         assert p.evaluate("ask('a', {leancut: 'frame', id: 2, t: 1.5})") == {"leancut": "drawn", "id": 2, "ok": True}
         bad = p.evaluate("ask('b', {leancut: 'frame', id: 3, t: 0.5})")
         assert bad["ok"] is False and "nope" in bad["error"]
+
+
+def test_port_file_read_tolerates_a_locked_or_missing_file(tmp_path, monkeypatch):
+    """Chrome holds DevToolsActivePort locked while writing it on Windows: reading must retry, not fail."""
+    f = tmp_path / "DevToolsActivePort"
+    assert g._read_port_file(f) == []
+    f.write_text("9222\n/devtools/browser/x\n", encoding="utf-8")
+
+    def locked(*a, **k):
+        raise PermissionError(13, "Permission denied")
+    monkeypatch.setattr(type(f), "read_text", locked)
+    assert g._read_port_file(f) == []
+    monkeypatch.undo()
+    assert g._read_port_file(f) == ["9222", "/devtools/browser/x"]
